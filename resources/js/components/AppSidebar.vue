@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import {
     BadgeCheck,
     BookOpenText,
@@ -9,6 +9,7 @@ import {
     MapPinned,
     UsersRound,
 } from '@lucide/vue';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -24,7 +25,8 @@ import {
 } from '@/components/ui/sidebar';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
+const page = usePage();
+const mainNavItems = computed<NavItem[]>(() => [
     {
         title: '工作台',
         href: '/dashboard',
@@ -40,12 +42,19 @@ const mainNavItems: NavItem[] = [
         href: '/groups',
         icon: UsersRound,
     },
-    {
-        title: '审批中心',
-        href: '/approvals',
-        icon: BadgeCheck,
-    },
-];
+    ...(page.props.auth.user.role &&
+    ['admin', 'department_approver', 'union_approver'].includes(
+        page.props.auth.user.role,
+    )
+        ? [
+              {
+                  title: '审批中心',
+                  href: '/approvals',
+                  icon: BadgeCheck,
+              },
+          ]
+        : []),
+]);
 
 const footerNavItems: NavItem[] = [
     {
@@ -83,7 +92,7 @@ const footerNavItems: NavItem[] = [
                 <Compass class="mb-4 size-5 text-[#e9b66d]" />
                 <p class="font-serif-cn text-sm font-semibold">秋季疗休养季</p>
                 <p class="mt-1 text-[11px] leading-5 text-white/60">
-                    9 条线路开放报名，去山水间重新找回节奏。
+                    已审批线路开放组团，去山水间重新找回节奏。
                 </p>
                 <Link
                     href="/groups"

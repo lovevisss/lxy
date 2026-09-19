@@ -2,6 +2,8 @@ export type User = {
     id: number;
     name: string;
     email: string;
+    role?: 'admin' | 'department_approver' | 'union_approver' | 'teacher';
+    department?: string | null;
     avatar?: string;
     email_verified_at: string | null;
     /* @chisel-2fa */

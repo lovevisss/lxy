@@ -9,10 +9,14 @@ import AppLogoIcon from '@/components/AppLogoIcon.vue';
         <AppLogoIcon class="size-5 text-white" />
     </div>
     <div class="ml-1.5 grid flex-1 text-left">
-        <span class="truncate font-serif-cn text-[15px] leading-tight font-semibold tracking-[0.08em]">
+        <span
+            class="font-serif-cn truncate text-[15px] leading-tight font-semibold tracking-[0.08em]"
+        >
             校园疗休养
         </span>
-        <span class="mt-0.5 truncate text-[9px] tracking-[0.18em] text-sidebar-foreground/45 uppercase">
+        <span
+            class="mt-0.5 truncate text-[9px] tracking-[0.18em] text-sidebar-foreground/45 uppercase"
+        >
             Journey & Rest
         </span>
     </div>
