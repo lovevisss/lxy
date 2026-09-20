@@ -3,19 +3,25 @@ import { computed, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowRight,
+    CircleDollarSign,
+    FileSpreadsheet,
     Clock3,
     Heart,
     Plus,
     Search,
     SlidersHorizontal,
+    Star,
     UsersRound,
 } from '@lucide/vue';
 import PageIntro from '@/components/retreat/PageIntro.vue';
 import RouteArtwork from '@/components/retreat/RouteArtwork.vue';
-import { retreatRoutes  } from '@/data/retreat';
-import type {RetreatRoute} from '@/data/retreat';
+import { retreatRoutes } from '@/data/retreat';
+import type { RetreatRoute } from '@/data/retreat';
 
-const props = defineProps<{ routeRecords?: RetreatRoute[] }>();
+const props = defineProps<{
+    routeRecords?: RetreatRoute[];
+    canImport?: boolean;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: '线路库', href: '/routes' }] },
@@ -74,11 +80,20 @@ function toggleFavorite(id: number) {
                 title="从一条好线路，开始一段好时光"
                 description="这里汇集已经完成校内审批的疗休养线路。你可以直接选用并创建团期，也可以提交一份自己的逐日行程。"
             >
-                <Link
-                    href="/routes/create"
-                    class="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b463b] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(27,70,59,.18)] transition hover:-translate-y-0.5 hover:bg-[#245849]"
-                    ><Plus class="size-4" /> 申报新线路</Link
-                >
+                <div class="flex flex-wrap gap-2">
+                    <Link
+                        v-if="canImport"
+                        href="/routes/import"
+                        class="inline-flex h-11 items-center gap-2 rounded-full border border-[#b9aa8b] bg-[#fffefa] px-5 text-sm font-semibold text-[#775b3d] transition hover:-translate-y-0.5 hover:bg-[#f6f0e4]"
+                    >
+                        <FileSpreadsheet class="size-4" /> 工会批量导入
+                    </Link>
+                    <Link
+                        href="/routes/create"
+                        class="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b463b] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(27,70,59,.18)] transition hover:-translate-y-0.5 hover:bg-[#245849]"
+                        ><Plus class="size-4" /> 申报新线路</Link
+                    >
+                </div>
             </PageIntro>
 
             <section
@@ -154,11 +169,40 @@ function toggleFavorite(id: number) {
                     <div class="p-5">
                         <div class="flex flex-wrap gap-1.5">
                             <span
+                                v-if="route.importedByUnion"
+                                class="rounded-full bg-[#e3ece6] px-2.5 py-1 text-[10px] font-semibold text-[#356050]"
+                            >
+                                工会统一导入
+                            </span>
+                            <span
                                 v-for="tag in route.tags"
                                 :key="tag"
                                 class="rounded-full bg-[#f1efe6] px-2.5 py-1 text-[10px] text-[#74766e] dark:bg-muted"
                                 >{{ tag }}</span
                             >
+                        </div>
+                        <div
+                            class="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#fff4df] px-3 py-1.5 text-[10px] font-semibold text-[#9d5b33]"
+                        >
+                            <Star
+                                :class="[
+                                    'size-3.5',
+                                    route.rating != null &&
+                                        'fill-[#d99a45] text-[#d99a45]',
+                                ]"
+                            />
+                            <template v-if="route.rating != null">
+                                {{ route.rating.toFixed(1) }} ·
+                                {{ route.reviewCount ?? 0 }} 条评价
+                            </template>
+                            <template v-else>暂无参团评价</template>
+                        </div>
+                        <div
+                            v-if="route.funding"
+                            class="mt-2 ml-2 inline-flex items-center gap-1.5 rounded-full bg-[#e9f1eb] px-3 py-1.5 text-[10px] font-semibold text-[#3c6758]"
+                        >
+                            <CircleDollarSign class="size-3.5" />
+                            工会补助 {{ route.funding.dailySubsidy }} 元/人/天
                         </div>
                         <Link :href="`/routes/${route.id}`">
                             <h2

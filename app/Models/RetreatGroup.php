@@ -16,6 +16,10 @@ class RetreatGroup extends Model
             'departure_date' => 'date',
             'return_date' => 'date',
             'application_deadline' => 'date',
+            'formed_at' => 'datetime',
+            'failed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
+            'final_confirmation_deadline' => 'datetime',
         ];
     }
 
@@ -32,5 +36,15 @@ class RetreatGroup extends Model
     public function applications(): HasMany
     {
         return $this->hasMany(RetreatGroupApplication::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(RetreatGroupReview::class);
+    }
+
+    public function smsNotifications(): HasMany
+    {
+        return $this->hasMany(RetreatSmsNotification::class);
     }
 }

@@ -12,7 +12,16 @@ export type RetreatRoute = {
     updatedAt: string;
     favorite: boolean;
     cover?: string;
+    importedByUnion?: boolean;
+    rating?: number | null;
+    reviewCount?: number;
     highlights?: string[];
+    funding?: {
+        dailySubsidy: number;
+        estimatedSubsidy: number;
+        selfFundedItems: string[];
+        disclaimer: string;
+    };
     service?: {
         inboundTransport: string;
         outboundTransport: string;
@@ -41,8 +50,41 @@ export type RetreatGroup = {
     joined: number;
     capacity: number;
     min: number;
-    status: '报名中' | '即将满员' | '已成团' | '已截止';
+    status:
+        | '报名中'
+        | '即将满员'
+        | '已成团'
+        | '已截止'
+        | '已结束'
+        | '未成团'
+        | '已取消';
     palette: string;
+    location?: string;
+    region?: string;
+    days?: number;
+    departureDate?: string;
+    returnDate?: string;
+    applicationDeadline?: string;
+    meetingInfo?: string | null;
+    notes?: string | null;
+    attachmentName?: string | null;
+    attachmentUrl?: string | null;
+    wechatQrCodeName?: string | null;
+    wechatQrCodeUrl?: string | null;
+    canReview?: boolean;
+    reviewed?: boolean;
+    contactMobile?: string | null;
+    finalConfirmationStatus?:
+        'not_required' | 'pending' | 'confirmed' | 'declined';
+    rawStatus?: 'open' | 'formed' | 'failed' | 'cancelled';
+    statusReason?: string | null;
+    finalConfirmationDeadline?: string | null;
+    confirmationCounts?: {
+        pending: number;
+        confirmed: number;
+        declined: number;
+    } | null;
+    approvalMode?: 'automatic' | 'manual';
 };
 
 export type ItineraryDay = {
@@ -77,6 +119,16 @@ export const retreatRoutes: RetreatRoute[] = [
             '延边朝鲜族民俗与特色餐饮',
             '森林漂流与二道白河慢游体验',
         ],
+        funding: {
+            dailySubsidy: 500,
+            estimatedSubsidy: 2500,
+            selfFundedItems: [
+                '杭州往返长春机票及机场往返交通',
+                '个人消费、行李超额费及方案未列明项目',
+            ],
+            disclaimer:
+                '工会按每人每天 500 元标准提供疗休养经费，超出补助范围及明确列示的项目由个人自行承担。',
+        },
         service: {
             inboundTransport: '杭州—长春 CZ6546，参考时刻 11:50—15:00',
             outboundTransport: '长春—杭州 CZ6405，参考时刻 16:00—19:05',

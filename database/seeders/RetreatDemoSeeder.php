@@ -35,6 +35,17 @@ class RetreatDemoSeeder extends Seeder
             ],
         );
 
+        User::updateOrCreate(
+            ['email' => 'member@lxy.edu.cn'],
+            [
+                'name' => '李老师',
+                'password' => Hash::make('Member@2026'),
+                'email_verified_at' => now(),
+                'role' => 'teacher',
+                'department' => '人文学院',
+            ],
+        );
+
         $route = RetreatRoute::updateOrCreate(
             ['title' => '北国风光 · 长春长白山延吉五日'],
             [
@@ -58,6 +69,7 @@ class RetreatDemoSeeder extends Seeder
                 'guide_service' => '全程专业中文导游服务，关键景点提供讲解。',
                 'insurance' => '旅行社责任险及旅游意外保险，具体保额以最终保单为准。',
                 'value_added' => ['提供旅行用品、饮用水及常备外用药品', '全程不安排购物点'],
+                'self_funded_items' => ['杭州往返长春机票及机场往返交通', '个人消费、行李超额费及方案未列明项目'],
                 'notices' => ['携带有效身份证件', '根据长白山气候准备保暖及防雨衣物', '如实告知影响出行安全的健康情况'],
                 'cover_path' => '/images/retreat/changchun-changbaishan-yanji-cover.png',
                 'status' => 'approved',
@@ -115,6 +127,7 @@ class RetreatDemoSeeder extends Seeder
                 'guide_service' => '全程中文导游及安全联络服务。',
                 'insurance' => '旅行社责任险及旅游意外保险。',
                 'value_added' => ['每日饮用水', '常用外用药品'],
+                'self_funded_items' => ['往返大交通费用（如机票、高铁票）', '个人消费及方案未列明项目'],
                 'notices' => ['穿着防滑运动鞋', '携带有效身份证件'],
                 'status' => 'pending_department',
                 'current_stage' => 'department',
@@ -154,6 +167,7 @@ class RetreatDemoSeeder extends Seeder
                 'application_deadline' => '2026-10-15',
                 'min_people' => 20,
                 'max_people' => 25,
+                'approval_mode' => 'manual',
                 'meeting_info' => '学校东门 07:30 集合，统一乘车前往机场。',
                 'notes' => '报名时请确认本人及随行家属信息。',
                 'status' => 'open',
@@ -166,6 +180,7 @@ class RetreatDemoSeeder extends Seeder
                 'member_count' => 1,
                 'family_members' => [],
                 'message' => '团长创建组团时自动加入',
+                'contact_mobile' => '13800000001',
                 'status' => 'approved',
                 'reviewed_by' => $admin->id,
                 'reviewed_at' => now(),
@@ -175,7 +190,42 @@ class RetreatDemoSeeder extends Seeder
 
         RetreatGroupApplication::updateOrCreate(
             ['retreat_group_id' => $group->id, 'user_id' => $teacher->id],
-            ['member_count' => 2, 'family_members' => [['name' => '陈老师家属', 'relationship' => '配偶']], 'message' => '本人携一名家属参加。', 'status' => 'pending'],
+            ['member_count' => 2, 'family_members' => [['name' => '陈老师家属', 'relationship' => '配偶']], 'message' => '本人携一名家属参加。', 'contact_mobile' => '13800000002', 'status' => 'pending'],
         );
+
+        $endedGroup = RetreatGroup::updateOrCreate(
+            ['title' => '九月长白山延吉疗休养回顾团'],
+            [
+                'retreat_route_id' => $route->id,
+                'leader_id' => $admin->id,
+                'departure_date' => now()->subDays(10)->toDateString(),
+                'return_date' => now()->subDays(6)->toDateString(),
+                'application_deadline' => now()->subDays(20)->toDateString(),
+                'min_people' => 20,
+                'max_people' => 25,
+                'approval_mode' => 'manual',
+                'meeting_info' => '本团行程已顺利结束。',
+                'notes' => '欢迎已参团成员提交真实体验评价。',
+                'status' => 'formed',
+            ],
+        );
+
+        foreach ([$admin, $teacher] as $member) {
+            RetreatGroupApplication::updateOrCreate(
+                ['retreat_group_id' => $endedGroup->id, 'user_id' => $member->id],
+                [
+                    'member_count' => 1,
+                    'family_members' => [],
+                    'message' => $member->id === $admin->id ? '团长自动加入' : '已确认参团',
+                    'contact_mobile' => $member->id === $admin->id ? '13800000001' : '13800000002',
+                    'status' => 'approved',
+                    'final_confirmation_status' => 'confirmed',
+                    'final_confirmation_at' => now()->subDays(18),
+                    'reviewed_by' => $admin->id,
+                    'reviewed_at' => now()->subDays(18),
+                    'review_comment' => '报名已确认',
+                ],
+            );
+        }
     }
 }

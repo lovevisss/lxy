@@ -42,6 +42,12 @@ class RetreatApprovalController extends Controller
                 'people' => "{$route->min_people}—{$route->max_people} 人",
                 'location' => $route->location,
                 'summary' => $route->summary,
+                'dailySubsidy' => 500,
+                'estimatedSubsidy' => $route->days * 500,
+                'selfFundedItems' => $route->self_funded_items ?? [
+                    '往返大交通费用（如机票、高铁票）',
+                    '个人消费及方案未列明项目',
+                ],
                 'stage' => $route->current_stage,
                 'itinerary' => $route->itineraryDays->map(fn ($day) => [
                     'day' => $day->day_number,
@@ -71,6 +77,12 @@ class RetreatApprovalController extends Controller
                     'people' => "{$route->min_people}—{$route->max_people} 人",
                     'location' => $route->location,
                     'summary' => $route->summary,
+                    'dailySubsidy' => 500,
+                    'estimatedSubsidy' => $route->days * 500,
+                    'selfFundedItems' => $route->self_funded_items ?? [
+                        '往返大交通费用（如机票、高铁票）',
+                        '个人消费及方案未列明项目',
+                    ],
                     'stage' => $approval->stage,
                     'decision' => $approval->action,
                     'comment' => $approval->comment,

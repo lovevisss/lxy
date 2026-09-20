@@ -61,6 +61,11 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(RetreatGroup::class, 'leader_id');
     }
 
+    public function retreatGroupReviews(): HasMany
+    {
+        return $this->hasMany(RetreatGroupReview::class);
+    }
+
     public function isRetreatAdmin(): bool
     {
         return $this->role === 'admin';

@@ -15,6 +15,7 @@ class RetreatRoute extends Model
         return [
             'highlights' => 'array',
             'value_added' => 'array',
+            'self_funded_items' => 'array',
             'notices' => 'array',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
@@ -24,6 +25,11 @@ class RetreatRoute extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function importBatch(): BelongsTo
+    {
+        return $this->belongsTo(RetreatRouteImport::class, 'retreat_route_import_id');
     }
 
     public function itineraryDays(): HasMany
@@ -39,5 +45,10 @@ class RetreatRoute extends Model
     public function groups(): HasMany
     {
         return $this->hasMany(RetreatGroup::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(RetreatGroupReview::class);
     }
 }

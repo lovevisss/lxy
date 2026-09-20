@@ -6,6 +6,7 @@ import {
     ArrowRight,
     CalendarDays,
     Check,
+    CircleDollarSign,
     FileText,
     GripVertical,
     Hotel,
@@ -61,6 +62,9 @@ const ticketStandard = ref('');
 const guideService = ref('');
 const insurance = ref('');
 const valueAdded = ref('');
+const selfFundedItems = ref(
+    '往返大交通费用（如机票、高铁票）\n个人消费及方案未列明项目',
+);
 const notices = ref('');
 const coverGenerated = ref(false);
 const minPeople = ref(12);
@@ -172,6 +176,7 @@ function submitRoute() {
             guide_service: guideService.value,
             insurance: insurance.value,
             value_added: splitLines(valueAdded.value),
+            self_funded_items: splitLines(selfFundedItems.value),
             notices: splitLines(notices.value),
             cover_generated: coverGenerated.value,
             days: days.value,
@@ -655,6 +660,61 @@ function submitRoute() {
                                 placeholder="每行一项，如饮用水、旅行用品、生日关怀、不安排购物等"
                             />
                         </label>
+                        <div
+                            class="overflow-hidden rounded-2xl border border-[#e3c58f] bg-[#fff8e9]"
+                        >
+                            <div
+                                class="flex flex-col gap-3 border-b border-[#ead8b6] bg-[#f7ead1] p-4 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <span
+                                        class="grid size-10 place-items-center rounded-full bg-[#a9613f] text-white"
+                                    >
+                                        <CircleDollarSign class="size-5" />
+                                    </span>
+                                    <div>
+                                        <p
+                                            class="text-sm font-semibold text-[#70432d]"
+                                        >
+                                            工会疗休养经费标准
+                                        </p>
+                                        <p
+                                            class="mt-1 text-[10px] text-[#98735d]"
+                                        >
+                                            统一按实际行程天数计算
+                                        </p>
+                                    </div>
+                                </div>
+                                <p
+                                    class="font-serif-cn text-2xl font-semibold text-[#a45435]"
+                                >
+                                    500 元
+                                    <span class="text-xs font-normal"
+                                        >/ 人 / 天</span
+                                    >
+                                </p>
+                            </div>
+                            <label class="block p-4">
+                                <span
+                                    class="mb-2 flex items-center gap-2 text-xs font-semibold text-[#70432d]"
+                                >
+                                    <Plane class="size-3.5" />
+                                    个人自理费用项目 *
+                                </span>
+                                <textarea
+                                    v-model="selfFundedItems"
+                                    required
+                                    rows="4"
+                                    class="w-full resize-none rounded-xl border border-[#dfcaa3] bg-white/75 p-4 text-sm leading-6 outline-none focus:border-[#b56a45]"
+                                    placeholder="每行一项，如往返机票、高铁票、机场接送、个人消费等"
+                                />
+                                <p
+                                    class="mt-2 text-[10px] leading-5 text-[#98735d]"
+                                >
+                                    请明确列出不由工会经费承担、需参团人员自行支付的项目，报名页面将直接展示。
+                                </p>
+                            </label>
+                        </div>
                         <label class="block"
                             ><span class="mb-2 block text-xs font-semibold"
                                 >统一注意事项 *</span
@@ -668,7 +728,7 @@ function submitRoute() {
                         <div
                             class="rounded-2xl bg-[#f2eee2] p-4 text-[11px] leading-6 text-[#6f736b]"
                         >
-                            本系统不管理线路费用、付款和退款，服务标准中请勿填写个人自付金额。
+                            系统仅展示经费政策与自理项目，不处理付款和退款；具体金额、出票及结算方式由团长另行通知。
                         </div>
                     </div>
 

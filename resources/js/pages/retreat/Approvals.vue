@@ -5,10 +5,12 @@ import {
     BadgeCheck,
     ChevronRight,
     CircleAlert,
+    CircleDollarSign,
     Clock3,
     FileDiff,
     Filter,
     Search,
+    Plane,
 } from '@lucide/vue';
 import { toast } from 'vue-sonner';
 import PageIntro from '@/components/retreat/PageIntro.vue';
@@ -31,6 +33,9 @@ type ApprovalRecord = {
     people: string;
     location: string;
     summary: string;
+    dailySubsidy: number;
+    estimatedSubsidy: number;
+    selfFundedItems: string[];
     stage: 'department' | 'union';
     decision?: 'approved' | 'rejected';
     comment?: string | null;
@@ -71,8 +76,8 @@ function decide(action: '通过' | '退回') {
     const item = selected.value;
 
     if (!item) {
-return;
-}
+        return;
+    }
 
     if (action === '退回' && !comment.value.trim()) {
         toast.warning('请填写退回原因');
@@ -284,6 +289,34 @@ return;
                             <p class="text-[10px] text-[#96948a]">主要目的地</p>
                             <p class="font-serif-cn mt-2 text-lg font-semibold">
                                 {{ selected.location }}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="mt-4 grid overflow-hidden rounded-2xl border border-[#e2c78f] bg-[#fff8e9] sm:grid-cols-[210px_1fr]"
+                    >
+                        <div class="bg-[#a75a3b] p-4 text-white">
+                            <p
+                                class="flex items-center gap-2 text-[10px] text-white/65"
+                            >
+                                <CircleDollarSign class="size-4" />经费审核要点
+                            </p>
+                            <p class="font-serif-cn mt-2 text-lg font-semibold">
+                                {{ selected.dailySubsidy }} 元/人/天
+                            </p>
+                            <p class="mt-1 text-[10px] text-white/60">
+                                {{ selected.days }} 天参考补助
+                                {{ selected.estimatedSubsidy }} 元/人
+                            </p>
+                        </div>
+                        <div class="p-4">
+                            <p
+                                class="flex items-center gap-2 text-[10px] font-semibold text-[#75452f]"
+                            >
+                                <Plane class="size-3.5" />申报的个人自理项目
+                            </p>
+                            <p class="mt-2 text-xs leading-6 text-[#75695f]">
+                                {{ selected.selfFundedItems.join('；') }}
                             </p>
                         </div>
                     </div>

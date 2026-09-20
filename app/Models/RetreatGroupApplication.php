@@ -14,6 +14,7 @@ class RetreatGroupApplication extends Model
         return [
             'family_members' => 'array',
             'reviewed_at' => 'datetime',
+            'final_confirmation_at' => 'datetime',
         ];
     }
 
