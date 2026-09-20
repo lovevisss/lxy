@@ -1,15 +1,28 @@
 <?php
 
+use App\Http\Controllers\CasAuthController;
 use App\Http\Controllers\RetreatApprovalController;
 use App\Http\Controllers\RetreatDashboardController;
 use App\Http\Controllers\RetreatGroupController;
 use App\Http\Controllers\RetreatRouteController;
 use App\Http\Controllers\RetreatRouteImportController;
+use App\Http\Middleware\EnsureRetreatEligible;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware('guest')->group(function () {
+    Route::get('auth/cas', [CasAuthController::class, 'redirect'])->name('auth.cas.redirect');
+    Route::get('auth/cas/callback', [CasAuthController::class, 'callback'])->name('auth.cas.callback');
+});
+Route::get('auth/cas/logged-out', [CasAuthController::class, 'loggedOut'])->name('auth.cas.logged-out');
+Route::match(['get', 'post'], 'auth/cas/slo', [CasAuthController::class, 'singleLogout'])
+    ->name('auth.cas.slo');
+Route::post('auth/cas/logout', [CasAuthController::class, 'logout'])
+    ->middleware('auth')
+    ->name('auth.cas.logout');
+
+Route::middleware(['auth', 'verified', EnsureRetreatEligible::class])->group(function () {
     Route::get('dashboard', RetreatDashboardController::class)->name('dashboard');
     Route::get('routes', [RetreatRouteController::class, 'index'])->name('retreat.routes');
     Route::get('routes/create', [RetreatRouteController::class, 'create'])->name('retreat.routes.create');

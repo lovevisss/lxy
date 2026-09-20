@@ -168,7 +168,7 @@ return [
 
     'features' => [
         /* @chisel-registration */
-        Features::registration(),
+        // 教职工统一通过 CAS 与资格清单建档，不开放自助注册。
         /* @end-chisel-registration */
         Features::resetPasswords(),
         /* @chisel-email-verification */

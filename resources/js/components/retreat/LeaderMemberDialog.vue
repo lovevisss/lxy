@@ -3,6 +3,7 @@ import { router } from '@inertiajs/vue3';
 import {
     BadgeCheck,
     Plus,
+    Search,
     Smartphone,
     Trash2,
     UserPlus,
@@ -29,7 +30,8 @@ type AvailableMember = {
     id: number;
     name: string;
     department: string;
-    email: string;
+    staffNumber?: string | null;
+    hasMobile?: boolean;
 };
 
 const props = withDefaults(
@@ -51,6 +53,7 @@ const emit = defineEmits<{ saved: [] }>();
 const open = ref(false);
 const processing = ref(false);
 const selectedUserId = ref<number | ''>('');
+const memberSearch = ref('');
 const contactMobile = ref('');
 const family = ref<FamilyMember[]>([]);
 const errors = ref<Record<string, string>>({});
@@ -71,6 +74,24 @@ const familyLimit = computed(() => {
     );
 });
 const canAddFamily = computed(() => family.value.length < familyLimit.value);
+const filteredMembers = computed(() => {
+    const keyword = memberSearch.value.trim().toLocaleLowerCase();
+
+    if (!keyword) {
+        return props.availableMembers;
+    }
+
+    return props.availableMembers.filter((member) =>
+        [member.name, member.department, member.staffNumber]
+            .filter(Boolean)
+            .some((value) =>
+                String(value).toLocaleLowerCase().includes(keyword),
+            ),
+    );
+});
+const selectedMember = computed(() =>
+    props.availableMembers.find((item) => item.id === selectedUserId.value),
+);
 
 watch(open, (isOpen) => {
     if (!isOpen) {
@@ -79,6 +100,7 @@ watch(open, (isOpen) => {
 
     errors.value = {};
     selectedUserId.value = '';
+    memberSearch.value = '';
     contactMobile.value = '';
     family.value = isMemberMode.value
         ? []
@@ -207,8 +229,19 @@ function submit() {
                             class="mb-2 flex items-center gap-2 text-xs font-semibold text-[#315348]"
                         >
                             <UserPlus class="size-3.5 text-[#b65f40]" />
-                            选择已注册教职工 *
+                            选择教师资格清单成员 *
                         </span>
+                        <div class="relative mb-2">
+                            <Search
+                                class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#8c9088]"
+                            />
+                            <input
+                                v-model="memberSearch"
+                                type="search"
+                                class="h-10 w-full rounded-xl border border-[#d9d4c7] bg-white pr-3 pl-9 text-xs outline-none focus:border-[#4e7568]"
+                                placeholder="搜索姓名、工号或单位"
+                            />
+                        </div>
                         <select
                             v-model="selectedUserId"
                             required
@@ -216,12 +249,13 @@ function submit() {
                         >
                             <option value="" disabled>请选择人员</option>
                             <option
-                                v-for="member in availableMembers"
+                                v-for="member in filteredMembers"
                                 :key="member.id"
                                 :value="member.id"
                             >
-                                {{ member.name }} · {{ member.department }} ·
-                                {{ member.email }}
+                                {{ member.name }} ·
+                                {{ member.staffNumber || '本地账号' }} ·
+                                {{ member.department }}
                             </option>
                         </select>
                         <p
@@ -230,6 +264,12 @@ function submit() {
                         >
                             暂无可添加账号，已在团内的人员不会重复显示。
                         </p>
+                        <p
+                            v-else-if="!filteredMembers.length"
+                            class="mt-2 text-[10px] text-[#8d735f]"
+                        >
+                            没有匹配的教师，请尝试其他姓名、工号或单位。
+                        </p>
                     </label>
 
                     <label class="mt-4 block">
@@ -237,17 +277,27 @@ function submit() {
                             class="mb-2 flex items-center gap-2 text-xs font-semibold text-[#315348]"
                         >
                             <Smartphone class="size-3.5 text-[#b65f40]" />
-                            短信联系手机号 *
+                            短信联系手机号
                         </span>
                         <input
                             v-model="contactMobile"
                             type="tel"
-                            required
                             maxlength="11"
                             pattern="1[3-9][0-9]{9}"
                             class="h-11 w-full rounded-xl border border-[#d9d4c7] bg-[#faf9f3] px-4 text-sm outline-none focus:border-[#4e7568]"
-                            placeholder="用于成团与最终确认提醒"
+                            :placeholder="
+                                selectedMember?.hasMobile
+                                    ? '已从教师目录读取，可不填写'
+                                    : '目录无手机号时请手工填写'
+                            "
                         />
+                        <p class="mt-2 text-[10px] text-[#8c8b82]">
+                            {{
+                                selectedMember?.hasMobile
+                                    ? '系统将在保存时安全读取该教师的目录手机号。'
+                                    : '用于成团、取消及最终参团确认短信。'
+                            }}
+                        </p>
                     </label>
                 </template>
 

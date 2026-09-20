@@ -278,14 +278,15 @@ class RetreatGroupController extends Controller
                 ? User::query()
                     ->whereNotIn('id', $retreatGroup->applications->pluck('user_id'))
                     ->whereNotNull('email_verified_at')
+                    ->where('retreat_eligible', true)
                     ->orderBy('name')
-                    ->limit(200)
-                    ->get(['id', 'name', 'department', 'email'])
+                    ->get(['id', 'name', 'department', 'staff_number', 'mobile'])
                     ->map(fn (User $user) => [
                         'id' => $user->id,
                         'name' => $user->name,
                         'department' => $user->department ?: '未设置单位',
-                        'email' => $user->email,
+                        'staffNumber' => $user->staff_number,
+                        'hasMobile' => filled($user->mobile),
                     ])
                 : [],
             'applications' => $retreatGroup->applications
@@ -395,7 +396,7 @@ class RetreatGroupController extends Controller
 
         $validated = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
-            'contact_mobile' => ['required', 'regex:/^1[3-9]\d{9}$/'],
+            'contact_mobile' => ['nullable', 'regex:/^1[3-9]\d{9}$/'],
             'family_members' => ['present', 'array', 'max:9'],
             'family_members.*.name' => ['required', 'string', 'max:50'],
             'family_members.*.relationship' => ['required', 'string', 'max:30'],
@@ -413,6 +414,14 @@ class RetreatGroupController extends Controller
                 ]);
             }
 
+            $member = User::query()->findOrFail($validated['user_id']);
+            $contactMobile = trim((string) ($validated['contact_mobile'] ?? $member->mobile));
+            if (! preg_match('/^1[3-9]\d{9}$/', $contactMobile)) {
+                throw ValidationException::withMessages([
+                    'contact_mobile' => '教师目录中没有有效手机号，请手工填写短信联系手机号。',
+                ]);
+            }
+
             $joined = (int) $group->applications()->where('status', 'approved')->sum('member_count');
             if ($joined + $memberCount > $group->max_people) {
                 throw ValidationException::withMessages([
@@ -425,7 +434,7 @@ class RetreatGroupController extends Controller
                 'member_count' => $memberCount,
                 'family_members' => $validated['family_members'],
                 'message' => '由团长直接加入团队',
-                'contact_mobile' => $validated['contact_mobile'],
+                'contact_mobile' => $contactMobile,
                 'status' => 'approved',
                 'reviewed_by' => $request->user()->id,
                 'reviewed_at' => now(),
@@ -591,8 +600,7 @@ class RetreatGroupController extends Controller
         RetreatGroup $group,
         ?int $currentUserId = null,
         bool $canManage = false,
-    ): array
-    {
+    ): array {
         $currentApplication = $group->relationLoaded('applications')
             ? $group->applications->firstWhere('user_id', $currentUserId)
             : null;

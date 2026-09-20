@@ -264,59 +264,6 @@ onBeforeUnmount(() => {
                                 }}
                             </p>
                         </div>
-                        <div>
-                            <span
-                                class="mb-2 flex items-center gap-2 text-xs font-semibold"
-                                ><QrCode class="size-3.5 text-[#b15d3d]" />
-                                微信群二维码</span
-                            >
-                            <label
-                                class="flex cursor-pointer flex-col gap-4 rounded-2xl border border-dashed border-[#d3cec1] bg-[#faf9f3] p-5 transition hover:border-[#6e8c81] sm:flex-row sm:items-center dark:bg-background"
-                            >
-                                <img
-                                    v-if="wechatQrCodePreview"
-                                    :src="wechatQrCodePreview"
-                                    alt="微信群二维码预览"
-                                    class="size-24 shrink-0 rounded-xl border border-[#dedbd0] bg-white object-contain p-1"
-                                />
-                                <span
-                                    v-else
-                                    class="grid size-24 shrink-0 place-items-center rounded-xl bg-[#e8eee9] text-[#4b7063]"
-                                >
-                                    <QrCode class="size-10" />
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span
-                                        class="block truncate text-sm font-semibold text-[#36584d]"
-                                    >
-                                        {{
-                                            wechatQrCodeName ||
-                                            '选择微信群二维码图片'
-                                        }}
-                                    </span>
-                                    <span
-                                        class="mt-1 block text-[10px] leading-5 text-[#929087]"
-                                    >
-                                        支持 JPG、PNG、WebP，不超过 5MB。仅团长、管理员和已确认参团老师可查看。
-                                    </span>
-                                    <span
-                                        class="mt-3 inline-flex rounded-full bg-[#e6eee8] px-4 py-2 text-xs font-semibold text-[#396052]"
-                                    >
-                                        {{
-                                            wechatQrCodeName
-                                                ? '更换二维码'
-                                                : '上传二维码'
-                                        }}
-                                    </span>
-                                </span>
-                                <input
-                                    type="file"
-                                    accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                                    class="sr-only"
-                                    @change="selectWechatQrCode"
-                                />
-                            </label>
-                        </div>
                     </div>
                 </aside>
                 <section
@@ -556,6 +503,59 @@ onBeforeUnmount(() => {
                             >
                                 <Download class="size-3" /> 下载当前 PDF
                             </a>
+                        </div>
+                        <div>
+                            <span
+                                class="mb-2 flex items-center gap-2 text-xs font-semibold"
+                                ><QrCode class="size-3.5 text-[#b15d3d]" />
+                                微信群二维码</span
+                            >
+                            <label
+                                class="flex cursor-pointer flex-col gap-4 rounded-2xl border border-dashed border-[#d3cec1] bg-[#faf9f3] p-5 transition hover:border-[#6e8c81] sm:flex-row sm:items-center dark:bg-background"
+                            >
+                                <img
+                                    v-if="wechatQrCodePreview"
+                                    :src="wechatQrCodePreview"
+                                    alt="微信群二维码预览"
+                                    class="size-24 shrink-0 rounded-xl border border-[#dedbd0] bg-white object-contain p-1"
+                                />
+                                <span
+                                    v-else
+                                    class="grid size-24 shrink-0 place-items-center rounded-xl bg-[#e8eee9] text-[#4b7063]"
+                                >
+                                    <QrCode class="size-10" />
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span
+                                        class="block truncate text-sm font-semibold text-[#36584d]"
+                                    >
+                                        {{
+                                            wechatQrCodeName ||
+                                            '选择微信群二维码图片'
+                                        }}
+                                    </span>
+                                    <span
+                                        class="mt-1 block text-[10px] leading-5 text-[#929087]"
+                                    >
+                                        支持 JPG、PNG、WebP，不超过 5MB。仅团长、管理员和已确认参团老师可查看。
+                                    </span>
+                                    <span
+                                        class="mt-3 inline-flex rounded-full bg-[#e6eee8] px-4 py-2 text-xs font-semibold text-[#396052]"
+                                    >
+                                        {{
+                                            wechatQrCodeName
+                                                ? '更换二维码'
+                                                : '上传二维码'
+                                        }}
+                                    </span>
+                                </span>
+                                <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                    class="sr-only"
+                                    @change="selectWechatQrCode"
+                                />
+                            </label>
                         </div>
                     </div>
                     <div

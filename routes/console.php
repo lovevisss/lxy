@@ -33,3 +33,4 @@ Artisan::command('retreat:process-deadlines', function (RetreatGroupLifecycleSer
 })->purpose('处理报名截止的疗休养团队并生成短信通知任务');
 
 Schedule::command('retreat:process-deadlines')->hourly()->withoutOverlapping();
+Schedule::command('retreat:sync-teachers')->dailyAt('02:10')->withoutOverlapping();

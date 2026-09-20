@@ -2,6 +2,11 @@ export type User = {
     id: number;
     name: string;
     email: string;
+    staff_number?: string | null;
+    identity_source?: 'local' | 'cas';
+    retreat_eligible?: boolean;
+    directory_email?: string | null;
+    mobile?: string | null;
     role?: 'admin' | 'department_approver' | 'union_approver' | 'teacher';
     department?: string | null;
     avatar?: string;

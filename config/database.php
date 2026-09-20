@@ -64,6 +64,24 @@ return [
             ]) : [],
         ],
 
+        'middata' => [
+            'driver' => 'mysql',
+            'host' => env('MIDDATA_DB_HOST', '127.0.0.1'),
+            'port' => env('MIDDATA_DB_PORT', '3306'),
+            'database' => env('MIDDATA_DB_DATABASE', 'middata'),
+            'username' => env('MIDDATA_DB_USERNAME', ''),
+            'password' => env('MIDDATA_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                Mysql::ATTR_SSL_CA => env('MIDDATA_MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

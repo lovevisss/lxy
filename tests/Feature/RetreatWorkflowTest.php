@@ -108,17 +108,19 @@ class RetreatWorkflowTest extends TestCase
             'role' => 'teacher',
             'department' => '外国语学院',
             'email_verified_at' => now(),
+            'mobile' => '13800000004',
         ]);
         $this->actingAs($admin)
             ->post(route('retreat.groups.members.store', $group), [
                 'user_id' => $directMember->id,
-                'contact_mobile' => '13800000004',
                 'family_members' => [['name' => '同行子女', 'relationship' => '子女']],
             ])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
         $directMembership = $group->applications()->where('user_id', $directMember->id)->firstOrFail();
         $this->assertSame('approved', $directMembership->status);
         $this->assertSame(2, $directMembership->member_count);
+        $this->assertSame('13800000004', $directMembership->contact_mobile);
         $this->assertSame($admin->id, $directMembership->reviewed_by);
         $this->assertSame('团长手动添加成员', $directMembership->review_comment);
 
@@ -166,12 +168,22 @@ class RetreatWorkflowTest extends TestCase
                 'meeting_info' => '学校东门 07:30 集合',
                 'notes' => '请携带身份证',
                 'attachment' => UploadedFile::fake()->create('活动方案.pdf', 128, 'application/pdf'),
+                'wechat_qr_code' => UploadedFile::fake()->image('微信群二维码.png', 600, 600),
             ])
-            ->assertRedirect(route('retreat.groups.show', $group));
+            ->assertRedirect(route('retreat.groups.show', $group))
+            ->assertSessionHasNoErrors();
 
         $group->refresh();
         $this->assertSame('活动方案.pdf', $group->attachment_name);
+        $this->assertSame('微信群二维码.png', $group->wechat_qr_code_name);
         Storage::disk('local')->assertExists($group->attachment_path);
+        Storage::disk('local')->assertExists($group->wechat_qr_code_path);
+        $this->actingAs($admin)
+            ->get(route('retreat.groups.wechat-qr-code', $group))
+            ->assertOk();
+        $this->actingAs($teacher)
+            ->get(route('retreat.groups.wechat-qr-code', $group))
+            ->assertForbidden();
         $this->actingAs($teacher)
             ->get(route('retreat.groups.attachment', $group))
             ->assertOk();
@@ -198,6 +210,15 @@ class RetreatWorkflowTest extends TestCase
 
         $this->assertSame('approved', $application->fresh()->status);
         $this->assertSame($admin->id, $application->fresh()->reviewed_by);
+        $this->actingAs($teacher)
+            ->get(route('retreat.groups.wechat-qr-code', $group))
+            ->assertOk();
+        $this->actingAs($teacher)
+            ->get(route('retreat.groups.show', $group))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groupRecord.wechatQrCodeName', '微信群二维码.png')
+                ->where('groupRecord.wechatQrCodeUrl', route('retreat.groups.wechat-qr-code', $group)));
 
         $this->actingAs($admin)
             ->post(route('retreat.groups.status', $group), ['action' => 'formed'])

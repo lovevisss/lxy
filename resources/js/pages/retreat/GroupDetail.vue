@@ -55,7 +55,8 @@ type AvailableMember = {
     id: number;
     name: string;
     department: string;
-    email: string;
+    staffNumber?: string | null;
+    hasMobile?: boolean;
 };
 
 type CurrentReview = {
