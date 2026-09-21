@@ -7,6 +7,7 @@ import {
     BadgeCheck,
     CircleDollarSign,
     Clock3,
+    Download,
     FileText,
     Heart,
     Hotel,
@@ -205,11 +206,20 @@ defineOptions({
                             </p>
                         </div>
                     </div>
-                    <Link
-                        :href="`/groups/create?route=${route.id}`"
-                        class="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#c46140] px-6 text-sm font-semibold text-white shadow-[0_12px_26px_rgba(177,82,52,.2)] transition hover:-translate-y-0.5 hover:bg-[#b55536]"
-                        >使用这条线路发起组团 <ArrowRight class="size-4"
-                    /></Link>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        <Link
+                            :href="`/groups/create?route=${route.id}`"
+                            class="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#c46140] px-6 text-sm font-semibold text-white shadow-[0_12px_26px_rgba(177,82,52,.2)] transition hover:-translate-y-0.5 hover:bg-[#b55536]"
+                            >使用这条线路发起组团 <ArrowRight class="size-4"
+                        /></Link>
+                        <a
+                            v-if="route.attachmentUrl"
+                            :href="route.attachmentUrl"
+                            class="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-[#d6d2c5] bg-white px-5 text-xs font-semibold text-[#315348] transition hover:border-[#7d9a8f] dark:bg-card"
+                        >
+                            <Download class="size-4" /> 下载原始方案
+                        </a>
+                    </div>
                 </div>
             </section>
 

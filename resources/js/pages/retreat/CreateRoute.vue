@@ -45,58 +45,97 @@ type ItineraryDay = {
     stay: string;
     note: string;
 };
+
+type PdfDraft = {
+    title: string;
+    region: string;
+    location: string;
+    summary: string;
+    min_people: number;
+    max_people: number;
+    departure_city: string;
+    return_city: string;
+    inbound_transport: string;
+    outbound_transport: string;
+    highlights: string[];
+    experiences: string;
+    hotel_standard: string;
+    meal_standard: string;
+    local_transport: string;
+    ticket_standard: string;
+    guide_service: string;
+    insurance: string;
+    value_added: string[];
+    self_funded_items: string[];
+    notices: string[];
+    cover_generated: boolean;
+    days: ItineraryDay[];
+};
+
+const props = defineProps<{
+    pdfDraft?: PdfDraft | null;
+    pdfDraftToken?: string | null;
+    pdfSourceName?: string | null;
+}>();
+const draft = props.pdfDraft;
 const step = ref(1);
-const routeName = ref('');
-const location = ref('');
-const summary = ref('');
-const departureCity = ref('');
-const returnCity = ref('');
-const inboundTransport = ref('');
-const outboundTransport = ref('');
-const highlights = ref('');
-const experiences = ref('');
-const hotelStandard = ref('');
-const mealStandard = ref('');
-const localTransport = ref('');
-const ticketStandard = ref('');
-const guideService = ref('');
-const insurance = ref('');
-const valueAdded = ref('');
+const routeName = ref(draft?.title ?? '');
+const routeRegion = ref(draft?.region ?? '其他');
+const location = ref(draft?.location ?? '');
+const summary = ref(draft?.summary ?? '');
+const departureCity = ref(draft?.departure_city ?? '');
+const returnCity = ref(draft?.return_city ?? '');
+const inboundTransport = ref(draft?.inbound_transport ?? '');
+const outboundTransport = ref(draft?.outbound_transport ?? '');
+const highlights = ref(draft?.highlights?.join('\n') ?? '');
+const experiences = ref(draft?.experiences ?? '');
+const hotelStandard = ref(draft?.hotel_standard ?? '');
+const mealStandard = ref(draft?.meal_standard ?? '');
+const localTransport = ref(draft?.local_transport ?? '');
+const ticketStandard = ref(draft?.ticket_standard ?? '');
+const guideService = ref(draft?.guide_service ?? '');
+const insurance = ref(draft?.insurance ?? '');
+const valueAdded = ref(draft?.value_added?.join('\n') ?? '');
 const selfFundedItems = ref(
-    '往返大交通费用（如机票、高铁票）\n个人消费及方案未列明项目',
+    draft?.self_funded_items?.join('\n') ??
+        '往返大交通费用（如机票、高铁票）\n个人消费及方案未列明项目',
 );
-const notices = ref('');
-const coverGenerated = ref(false);
-const minPeople = ref(12);
-const maxPeople = ref(24);
-const days = ref<ItineraryDay[]>([
-    {
-        id: 1,
-        title: '',
-        location: '',
-        transport: '',
-        morning: '',
-        afternoon: '',
-        evening: '',
-        plan: '',
-        meals: '',
-        stay: '',
-        note: '',
-    },
-    {
-        id: 2,
-        title: '',
-        location: '',
-        transport: '',
-        morning: '',
-        afternoon: '',
-        evening: '',
-        plan: '',
-        meals: '',
-        stay: '',
-        note: '',
-    },
-]);
+const notices = ref(draft?.notices?.join('\n') ?? '');
+const coverGenerated = ref(draft?.cover_generated ?? false);
+const minPeople = ref(draft?.min_people ?? 12);
+const maxPeople = ref(draft?.max_people ?? 24);
+const days = ref<ItineraryDay[]>(
+    draft?.days?.length
+        ? draft.days
+        : [
+              {
+                  id: 1,
+                  title: '',
+                  location: '',
+                  transport: '',
+                  morning: '',
+                  afternoon: '',
+                  evening: '',
+                  plan: '',
+                  meals: '',
+                  stay: '',
+                  note: '',
+              },
+              {
+                  id: 2,
+                  title: '',
+                  location: '',
+                  transport: '',
+                  morning: '',
+                  afternoon: '',
+                  evening: '',
+                  plan: '',
+                  meals: '',
+                  stay: '',
+                  note: '',
+              },
+          ],
+);
 
 function addDay() {
     days.value.push({
@@ -158,7 +197,7 @@ function submitRoute() {
         '/routes',
         {
             title: routeName.value,
-            region: '其他',
+            region: routeRegion.value,
             location: location.value,
             summary: summary.value,
             min_people: minPeople.value,
@@ -179,6 +218,7 @@ function submitRoute() {
             self_funded_items: splitLines(selfFundedItems.value),
             notices: splitLines(notices.value),
             cover_generated: coverGenerated.value,
+            pdf_draft_token: props.pdfDraftToken,
             days: days.value,
         },
         {
@@ -224,6 +264,33 @@ function submitRoute() {
                     class="rounded-full border border-[#d7d4c7] bg-[#fffefa] px-4 py-2 text-xs font-semibold text-[#38584e]"
                     >提交后进入真实审批流程</span
                 >
+            </div>
+
+            <div
+                v-if="pdfDraft"
+                class="mt-6 flex flex-col gap-3 rounded-2xl border border-[#b9d3c7] bg-[#edf5f0] p-4 sm:flex-row sm:items-center sm:justify-between dark:border-border dark:bg-muted"
+            >
+                <div class="flex items-start gap-3">
+                    <span
+                        class="grid size-9 shrink-0 place-items-center rounded-full bg-[#28604f] text-white"
+                    >
+                        <FileText class="size-4" />
+                    </span>
+                    <div>
+                        <p class="text-sm font-semibold text-[#285244]">
+                            PDF 已解析并填入草稿
+                        </p>
+                        <p class="mt-1 text-xs leading-5 text-[#718078]">
+                            {{ pdfSourceName }} ·
+                            请重点核对逐日行程、人数与费用说明
+                        </p>
+                    </div>
+                </div>
+                <span
+                    class="shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-[#35705d] shadow-sm dark:bg-card"
+                >
+                    原文件将随线路保留
+                </span>
             </div>
 
             <div class="mt-8 grid gap-8 lg:grid-cols-[190px_1fr]">
@@ -817,6 +884,29 @@ function submitRoute() {
                             </div>
                         </div>
                         <div
+                            v-if="pdfSourceName"
+                            class="rounded-2xl border border-[#c8dbd2] bg-[#eef5f1] px-6 py-5 dark:border-border dark:bg-muted"
+                        >
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="grid size-10 place-items-center rounded-full bg-[#2c6252] text-white"
+                                >
+                                    <FileText class="size-4" />
+                                </span>
+                                <div class="min-w-0">
+                                    <p
+                                        class="truncate text-sm font-semibold text-[#315348]"
+                                    >
+                                        {{ pdfSourceName }}
+                                    </p>
+                                    <p class="mt-1 text-[10px] text-[#758079]">
+                                        已完成文字解析；提交线路后可在详情页下载原始方案
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            v-else
                             class="rounded-2xl border border-dashed border-[#cfcbbc] bg-[#f7f5ed] px-6 py-10 text-center dark:bg-muted"
                         >
                             <UploadCloud

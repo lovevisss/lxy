@@ -65,6 +65,7 @@ class CasAuthenticationTest extends TestCase
         $user = User::where('staff_number', 'T2026001')->firstOrFail();
         $this->assertAuthenticatedAs($user);
         $this->assertSame('测试教师', $user->name);
+        $this->assertSame('t2026001@zufedfc.edu.cn', $user->email);
         $this->assertSame('信息工程学院', $user->department);
         $this->assertSame('13800000006', $user->mobile);
         $this->assertSame('cas', $user->identity_source);
@@ -74,6 +75,26 @@ class CasAuthenticationTest extends TestCase
         Http::assertSent(fn (Request $request) => str_starts_with($request->url(), 'https://cas.example.edu/cas/serviceValidate?')
             && $request['service'] === 'https://retreat.example.edu/auth/cas/callback'
             && $request['ticket'] === 'ST-VALID');
+    }
+
+    public function test_cas_login_replaces_an_existing_local_user_session(): void
+    {
+        $localUser = User::factory()->create(['name' => '陈老师']);
+        DB::connection('middata')->table('t_cx_zzqxryxx')->insert([
+            'xgh' => 'T2026001',
+            'xm' => '测试教师',
+            'rylx' => '1',
+            'dwmc' => '信息工程学院',
+        ]);
+        Http::fake([
+            'https://cas.example.edu/cas/serviceValidate*' => Http::response($this->successXml(), 200),
+        ]);
+
+        $this->actingAs($localUser)
+            ->get(route('auth.cas.callback', ['ticket' => 'ST-SWITCH']))
+            ->assertRedirect('/dashboard');
+
+        $this->assertAuthenticatedAs(User::where('staff_number', 'T2026001')->firstOrFail());
     }
 
     public function test_non_teacher_cas_account_is_rejected_by_eligibility_list(): void

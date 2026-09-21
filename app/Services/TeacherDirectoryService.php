@@ -45,13 +45,13 @@ class TeacherDirectoryService
 
         $user = User::query()->firstOrNew(['staff_number' => $staffNumber]);
         if (! $user->exists) {
-            $user->email = 'cas-'.hash('sha256', $staffNumber).'@lxy.local';
             $user->password = $this->placeholderPasswordHash ??= Hash::make(Str::random(64));
             $user->role = 'teacher';
             $user->identity_source = 'cas';
         }
 
         $user->fill([
+            'email' => Str::lower($staffNumber).'@zufedfc.edu.cn',
             'name' => trim((string) $teacher->xm),
             'department' => trim((string) $teacher->dwmc) ?: null,
             'directory_email' => trim((string) $teacher->dzyx) ?: null,

@@ -6,6 +6,7 @@ import {
     BadgeCheck,
     CircleAlert,
     Download,
+    FileText,
     FileSpreadsheet,
     Layers3,
     ShieldCheck,
@@ -43,6 +44,46 @@ defineOptions({
 
 const file = ref<File | null>(null);
 const processing = ref(false);
+const pdfFile = ref<File | null>(null);
+const pdfProcessing = ref(false);
+
+function selectPdf(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const selected = input.files?.[0] ?? null;
+
+    if (selected && !selected.name.toLowerCase().endsWith('.pdf')) {
+        toast.error('请选择 PDF 文件');
+        input.value = '';
+
+        return;
+    }
+
+    pdfFile.value = selected;
+}
+
+function parsePdf() {
+    if (!pdfFile.value) {
+        toast.warning('请先选择需要解析的 PDF 方案');
+
+        return;
+    }
+
+    router.post(
+        '/routes/import/pdf',
+        { pdf: pdfFile.value },
+        {
+            forceFormData: true,
+            onStart: () => (pdfProcessing.value = true),
+            onFinish: () => (pdfProcessing.value = false),
+            onError: (errors) =>
+                toast.error('PDF 解析失败', {
+                    description:
+                        Object.values(errors)[0] ??
+                        '请确认 PDF 含有可提取文字和 D1、D2 等日程标记。',
+                }),
+        },
+    );
+}
 
 function selectFile(event: Event) {
     const selected = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -180,61 +221,131 @@ function statusLabel(status: ImportRecord['status']) {
             </section>
 
             <div class="mt-6 grid gap-6 lg:grid-cols-[1.08fr_.92fr]">
-                <section
-                    class="rounded-[26px] border border-[#dfdcd0] bg-[#fffefa] p-5 md:p-8 dark:border-border dark:bg-card"
-                >
-                    <div>
-                        <p
-                            class="text-[10px] font-semibold tracking-[.18em] text-[#b25c3d] uppercase"
+                <div class="space-y-6">
+                    <section
+                        class="rounded-[26px] border border-[#b9d1c6] bg-[#eef5f1] p-5 md:p-8 dark:border-border dark:bg-card"
+                    >
+                        <div class="flex items-start gap-4">
+                            <span
+                                class="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#1d4b3e] text-white shadow-[0_10px_24px_rgba(29,75,62,.16)]"
+                            >
+                                <FileText class="size-5" />
+                            </span>
+                            <div>
+                                <p
+                                    class="text-[10px] font-semibold tracking-[.18em] text-[#b25c3d] uppercase"
+                                >
+                                    PDF smart parsing
+                                </p>
+                                <h2
+                                    class="font-serif-cn mt-1 text-2xl font-semibold text-[#244a3d]"
+                                >
+                                    上传现有方案，生成可编辑草稿
+                                </h2>
+                                <p
+                                    class="mt-2 text-xs leading-6 text-[#758078]"
+                                >
+                                    自动识别线路名称、交通、服务标准、注意事项和逐日行程；解析后先核对，再提交审批。
+                                </p>
+                            </div>
+                        </div>
+                        <label
+                            class="mt-6 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-dashed border-[#aebfb6] bg-white/70 p-4 transition hover:border-[#487463] dark:bg-muted"
                         >
-                            Upload file
-                        </p>
-                        <h2
-                            class="font-serif-cn mt-2 text-2xl font-semibold text-[#244a3d]"
+                            <div class="min-w-0">
+                                <p
+                                    class="truncate text-sm font-semibold text-[#315348]"
+                                >
+                                    {{ pdfFile?.name ?? '选择 PDF 行程方案' }}
+                                </p>
+                                <p class="mt-1 text-[10px] text-[#899089]">
+                                    支持文字型 PDF，最大 20MB
+                                </p>
+                            </div>
+                            <span
+                                class="shrink-0 rounded-full border border-[#cbd5cf] bg-white px-4 py-2 text-xs font-semibold text-[#49675d] dark:bg-card"
+                                >选择文件</span
+                            >
+                            <input
+                                type="file"
+                                accept=".pdf,application/pdf"
+                                class="sr-only"
+                                @change="selectPdf"
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            :disabled="!pdfFile || pdfProcessing"
+                            class="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#1d4b3e] text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                            @click="parsePdf"
                         >
-                            上传填写完成的模板
-                        </h2>
-                    </div>
+                            <FileText class="size-4" />
+                            {{
+                                pdfProcessing
+                                    ? '正在读取与解析…'
+                                    : '解析 PDF 并进入草稿'
+                            }}
+                        </button>
+                    </section>
 
-                    <label
-                        class="mt-6 flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed border-[#c9c2b1] bg-[#f7f5ed] p-8 text-center transition hover:border-[#648174] hover:bg-[#f1f3eb] dark:bg-muted"
+                    <section
+                        class="rounded-[26px] border border-[#dfdcd0] bg-[#fffefa] p-5 md:p-8 dark:border-border dark:bg-card"
                     >
-                        <span
-                            class="grid size-14 place-items-center rounded-full bg-[#1d4b3e] text-white shadow-[0_10px_24px_rgba(29,75,62,.2)]"
+                        <div>
+                            <p
+                                class="text-[10px] font-semibold tracking-[.18em] text-[#b25c3d] uppercase"
+                            >
+                                Upload file
+                            </p>
+                            <h2
+                                class="font-serif-cn mt-2 text-2xl font-semibold text-[#244a3d]"
+                            >
+                                上传填写完成的模板
+                            </h2>
+                        </div>
+
+                        <label
+                            class="mt-6 flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed border-[#c9c2b1] bg-[#f7f5ed] p-8 text-center transition hover:border-[#648174] hover:bg-[#f1f3eb] dark:bg-muted"
                         >
-                            <UploadCloud class="size-6" />
-                        </span>
-                        <p
-                            class="font-serif-cn mt-5 text-lg font-semibold text-[#315348]"
+                            <span
+                                class="grid size-14 place-items-center rounded-full bg-[#1d4b3e] text-white shadow-[0_10px_24px_rgba(29,75,62,.2)]"
+                            >
+                                <UploadCloud class="size-6" />
+                            </span>
+                            <p
+                                class="font-serif-cn mt-5 text-lg font-semibold text-[#315348]"
+                            >
+                                {{ file?.name ?? '选择线路导入文件' }}
+                            </p>
+                            <p class="mt-2 text-xs leading-6 text-[#8b8a82]">
+                                仅支持 CSV，文件不超过 5MB。请使用 UTF-8 CSV
+                                格式保存。
+                            </p>
+                            <span
+                                class="mt-4 rounded-full border border-[#d2cec1] bg-white px-4 py-2 text-xs font-semibold text-[#526d63]"
+                            >
+                                浏览文件
+                            </span>
+                            <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                class="sr-only"
+                                @change="selectFile"
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            :disabled="!file || processing"
+                            class="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#c46140] text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                            @click="submitImport"
                         >
-                            {{ file?.name ?? '选择线路导入文件' }}
-                        </p>
-                        <p class="mt-2 text-xs leading-6 text-[#8b8a82]">
-                            仅支持 CSV，文件不超过 5MB。请使用 UTF-8 CSV
-                            格式保存。
-                        </p>
-                        <span
-                            class="mt-4 rounded-full border border-[#d2cec1] bg-white px-4 py-2 text-xs font-semibold text-[#526d63]"
-                        >
-                            浏览文件
-                        </span>
-                        <input
-                            type="file"
-                            accept=".csv,text/csv"
-                            class="sr-only"
-                            @change="selectFile"
-                        />
-                    </label>
-                    <button
-                        type="button"
-                        :disabled="!file || processing"
-                        class="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#c46140] text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
-                        @click="submitImport"
-                    >
-                        <UploadCloud class="size-4" />
-                        {{ processing ? '正在校验并导入…' : '开始导入线路' }}
-                    </button>
-                </section>
+                            <UploadCloud class="size-4" />
+                            {{
+                                processing ? '正在校验并导入…' : '开始导入线路'
+                            }}
+                        </button>
+                    </section>
+                </div>
 
                 <aside class="space-y-4">
                     <div

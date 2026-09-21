@@ -12,6 +12,8 @@ export type RetreatRoute = {
     updatedAt: string;
     favorite: boolean;
     cover?: string;
+    attachmentName?: string | null;
+    attachmentUrl?: string | null;
     importedByUnion?: boolean;
     rating?: number | null;
     reviewCount?: number;

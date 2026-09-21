@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\RetreatRoute;
 use App\Models\RetreatRouteImport;
+use App\Services\RetreatRoutePdfParser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -125,6 +128,35 @@ class RetreatRouteImportController extends Controller
         ]);
 
         return back()->with('success', "导入完成：成功 {$imported} 条，失败 {$failed} 条");
+    }
+
+    public function parsePdf(Request $request, RetreatRoutePdfParser $parser): RedirectResponse
+    {
+        $this->authorizeUnionImport($request);
+        $validated = $request->validate([
+            'pdf' => ['required', 'file', 'mimes:pdf', 'max:20480'],
+        ]);
+
+        $file = $validated['pdf'];
+        $storedPath = $file->store('retreat-route-pdf-imports');
+
+        try {
+            $draft = $parser->parse(Storage::disk('local')->path($storedPath));
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($storedPath);
+            throw ValidationException::withMessages(['pdf' => $exception->getMessage()]);
+        }
+
+        $token = Str::random(40);
+        $request->session()->put("retreat.pdf_drafts.{$token}", [
+            'draft' => $draft,
+            'stored_path' => $storedPath,
+            'original_name' => $file->getClientOriginalName(),
+            'created_at' => now()->timestamp,
+        ]);
+
+        return to_route('retreat.routes.create', ['pdf_draft' => $token])
+            ->with('success', 'PDF 已解析为线路草稿，请核对后提交。');
     }
 
     /** @return array<string, array<int, array{row: int, data: array<string, string>}>> */

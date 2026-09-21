@@ -8,6 +8,7 @@ use App\Models\RetreatRoute;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -29,9 +30,16 @@ class RetreatRouteController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('retreat/CreateRoute');
+        $token = trim((string) $request->query('pdf_draft'));
+        $pdfDraft = $token !== '' ? $request->session()->get("retreat.pdf_drafts.{$token}") : null;
+
+        return Inertia::render('retreat/CreateRoute', [
+            'pdfDraft' => $pdfDraft['draft'] ?? null,
+            'pdfDraftToken' => $pdfDraft ? $token : null,
+            'pdfSourceName' => $pdfDraft['original_name'] ?? null,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -63,6 +71,7 @@ class RetreatRouteController extends Controller
             'notices' => ['required', 'array', 'min:1'],
             'notices.*' => ['string', 'max:500'],
             'cover_generated' => ['boolean'],
+            'pdf_draft_token' => ['nullable', 'string', 'size:40'],
             'days' => ['required', 'array', 'min:1'],
             'days.*.title' => ['required', 'string', 'max:150'],
             'days.*.location' => ['required', 'string', 'max:150'],
@@ -76,9 +85,19 @@ class RetreatRouteController extends Controller
             'days.*.note' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $route = DB::transaction(function () use ($request, $validated): RetreatRoute {
+        $pdfDraftToken = $validated['pdf_draft_token'] ?? null;
+        $pdfDraft = $pdfDraftToken
+            ? $request->session()->get("retreat.pdf_drafts.{$pdfDraftToken}")
+            : null;
+        if ($pdfDraftToken && ! $pdfDraft) {
+            throw ValidationException::withMessages([
+                'pdf_draft_token' => 'PDF 草稿已过期，请重新上传解析。',
+            ]);
+        }
+
+        $route = DB::transaction(function () use ($request, $validated, $pdfDraft): RetreatRoute {
             $days = $validated['days'];
-            unset($validated['days'], $validated['cover_generated']);
+            unset($validated['days'], $validated['cover_generated'], $validated['pdf_draft_token']);
 
             $route = RetreatRoute::create([
                 ...$validated,
@@ -87,6 +106,8 @@ class RetreatRouteController extends Controller
                 'cover_path' => $request->boolean('cover_generated')
                     ? '/images/retreat/changchun-changbaishan-yanji-cover.png'
                     : null,
+                'attachment_path' => $pdfDraft['stored_path'] ?? null,
+                'attachment_name' => $pdfDraft['original_name'] ?? null,
                 'status' => 'pending_department',
                 'current_stage' => 'department',
                 'submitted_at' => now(),
@@ -102,8 +123,29 @@ class RetreatRouteController extends Controller
             return $route;
         });
 
+        if ($pdfDraftToken) {
+            $request->session()->forget("retreat.pdf_drafts.{$pdfDraftToken}");
+        }
+
         return to_route('retreat.approvals')
             ->with('success', "线路“{$route->title}”已提交二级单位审批");
+    }
+
+    public function downloadAttachment(Request $request, RetreatRoute $retreatRoute)
+    {
+        abort_unless(
+            $retreatRoute->status === 'approved'
+            || $retreatRoute->creator_id === $request->user()->id
+            || $request->user()->canApproveRetreat(),
+            403,
+        );
+        abort_unless($retreatRoute->attachment_path, 404);
+        abort_unless(Storage::disk('local')->exists($retreatRoute->attachment_path), 404);
+
+        return Storage::disk('local')->download(
+            $retreatRoute->attachment_path,
+            $retreatRoute->attachment_name ?: '线路方案.pdf',
+        );
     }
 
     public function show(Request $request, RetreatRoute $retreatRoute): Response
@@ -254,6 +296,10 @@ class RetreatRouteController extends Controller
             'updatedAt' => $route->updated_at->format('m-d'),
             'favorite' => false,
             'cover' => $route->cover_path,
+            'attachmentName' => $route->attachment_name,
+            'attachmentUrl' => $route->attachment_path
+                ? route('retreat.routes.attachment', $route)
+                : null,
             'importedByUnion' => $route->retreat_route_import_id !== null,
             'rating' => $reviews->isEmpty()
                 ? null

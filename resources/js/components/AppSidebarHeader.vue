@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Bell, Search } from '@lucide/vue';
+import { usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem } from '@/types';
@@ -11,6 +13,15 @@ withDefaults(
     {
         breadcrumbs: () => [],
     },
+);
+
+const page = usePage();
+const user = computed(() => page.props.auth.user);
+const accountLabel = computed(
+    () =>
+        [user.value.department, user.value.staff_number]
+            .filter(Boolean)
+            .join(' · ') || user.value.email,
 );
 </script>
 
@@ -46,9 +57,11 @@ withDefaults(
                 <p
                     class="text-xs font-semibold text-[#243d35] dark:text-foreground"
                 >
-                    陈老师
+                    {{ user.name }}
                 </p>
-                <p class="text-[10px] text-[#8b8a80]">信息工程学院</p>
+                <p class="max-w-44 truncate text-[10px] text-[#8b8a80]">
+                    {{ accountLabel }}
+                </p>
             </div>
         </div>
     </header>

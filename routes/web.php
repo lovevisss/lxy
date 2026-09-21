@@ -11,10 +11,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
 
-Route::middleware('guest')->group(function () {
-    Route::get('auth/cas', [CasAuthController::class, 'redirect'])->name('auth.cas.redirect');
-    Route::get('auth/cas/callback', [CasAuthController::class, 'callback'])->name('auth.cas.callback');
-});
+// CAS must be able to replace an existing local session when the user switches accounts.
+Route::get('auth/cas', [CasAuthController::class, 'redirect'])->name('auth.cas.redirect');
+Route::get('auth/cas/callback', [CasAuthController::class, 'callback'])->name('auth.cas.callback');
 Route::get('auth/cas/logged-out', [CasAuthController::class, 'loggedOut'])->name('auth.cas.logged-out');
 Route::match(['get', 'post'], 'auth/cas/slo', [CasAuthController::class, 'singleLogout'])
     ->name('auth.cas.slo');
@@ -28,9 +27,11 @@ Route::middleware(['auth', 'verified', EnsureRetreatEligible::class])->group(fun
     Route::get('routes/create', [RetreatRouteController::class, 'create'])->name('retreat.routes.create');
     Route::get('routes/import', [RetreatRouteImportController::class, 'index'])->name('retreat.routes.import');
     Route::get('routes/import/template', [RetreatRouteImportController::class, 'template'])->name('retreat.routes.import.template');
+    Route::post('routes/import/pdf', [RetreatRouteImportController::class, 'parsePdf'])->name('retreat.routes.import.pdf');
     Route::post('routes/import', [RetreatRouteImportController::class, 'store'])->name('retreat.routes.import.store');
     Route::post('routes', [RetreatRouteController::class, 'store'])->name('retreat.routes.store');
     Route::post('routes/{retreatRoute}/reviews', [RetreatRouteController::class, 'storeReview'])->name('retreat.routes.reviews.store');
+    Route::get('routes/{retreatRoute}/attachment', [RetreatRouteController::class, 'downloadAttachment'])->name('retreat.routes.attachment');
     Route::get('routes/{retreatRoute}', [RetreatRouteController::class, 'show'])->name('retreat.routes.show');
 
     Route::get('approvals', [RetreatApprovalController::class, 'index'])->name('retreat.approvals');

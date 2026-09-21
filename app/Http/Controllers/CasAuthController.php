@@ -63,7 +63,7 @@ class CasAuthController extends Controller
         }
 
         $intended = $request->session()->pull('cas.intended', '/dashboard');
-        Auth::login($user);
+        Auth::login($user->fresh());
         $request->session()->regenerate();
         $request->session()->put('cas.authenticated', true);
 
