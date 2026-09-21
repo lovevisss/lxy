@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -70,7 +71,7 @@ class CasAuthController extends Controller
         return redirect()->to($this->safeIntendedUrl((string) $intended));
     }
 
-    public function logout(Request $request, CasClient $cas): RedirectResponse
+    public function logout(Request $request, CasClient $cas): Response
     {
         $casAuthenticated = (bool) $request->session()->pull('cas.authenticated', false);
         Auth::logout();
@@ -78,7 +79,13 @@ class CasAuthController extends Controller
         $request->session()->regenerateToken();
 
         if ($casAuthenticated && config('cas.enabled')) {
-            return redirect()->away($cas->logoutUrl(route('auth.cas.logged-out')));
+            $logoutUrl = $cas->logoutUrl(route('auth.cas.logged-out'));
+
+            // An Inertia redirect is followed by XMLHttpRequest, which cannot cross
+            // over to the CAS domain. A location response forces a top-level navigation.
+            return $request->header('X-Inertia')
+                ? Inertia::location($logoutUrl)
+                : redirect()->away($logoutUrl);
         }
 
         return to_route('login');

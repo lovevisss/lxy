@@ -69,7 +69,7 @@ function parsePdf() {
     }
 
     router.post(
-        '/routes/import/pdf',
+        '/routes/import',
         { pdf: pdfFile.value },
         {
             forceFormData: true,

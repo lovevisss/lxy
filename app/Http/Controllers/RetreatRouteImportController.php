@@ -74,9 +74,13 @@ class RetreatRouteImportController extends Controller
         }, '工会疗休养线路导入模板.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, RetreatRoutePdfParser $parser): RedirectResponse
     {
         $this->authorizeUnionImport($request);
+        if ($request->hasFile('pdf')) {
+            return $this->parsePdf($request, $parser);
+        }
+
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
         ]);

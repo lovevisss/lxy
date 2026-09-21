@@ -28,7 +28,7 @@ class RetreatRoutePdfImportTest extends TestCase
             $mock->shouldReceive('parse')->once()->andReturn($draft);
         });
 
-        $response = $this->actingAs($admin)->post(route('retreat.routes.import.pdf'), [
+        $response = $this->actingAs($admin)->post(route('retreat.routes.import.store'), [
             'pdf' => UploadedFile::fake()->create('长白山方案.pdf', 100, 'application/pdf'),
         ]);
 

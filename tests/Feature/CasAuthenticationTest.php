@@ -176,6 +176,23 @@ class CasAuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_inertia_logout_uses_a_full_page_navigation_to_cas(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->withSession(['cas.authenticated' => true])
+            ->withHeader('X-Inertia', 'true')
+            ->post(route('auth.cas.logout'))
+            ->assertStatus(409)
+            ->assertHeader(
+                'X-Inertia-Location',
+                'https://cas.example.edu/cas/logout?service='.urlencode(route('auth.cas.logged-out')),
+            );
+
+        $this->assertGuest();
+    }
+
     private function successXml(): string
     {
         return <<<'XML'
