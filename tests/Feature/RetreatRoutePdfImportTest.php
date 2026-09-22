@@ -48,7 +48,7 @@ class RetreatRoutePdfImportTest extends TestCase
         $this->post(route('retreat.routes.store'), [
             ...$draft,
             'pdf_draft_token' => $token,
-        ])->assertRedirect(route('retreat.approvals'));
+        ])->assertRedirect(route('retreat.routes.show', 1));
 
         $route = RetreatRoute::where('title', '长白山五日疗休养')->firstOrFail();
         $this->assertSame('长白山方案.pdf', $route->attachment_name);

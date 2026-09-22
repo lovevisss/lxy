@@ -7,6 +7,7 @@ use App\Models\RetreatGroupApplication;
 use App\Models\RetreatGroupReview;
 use App\Models\RetreatRoute;
 use App\Models\User;
+use App\Services\RetreatGroupApprovalService;
 use App\Services\RetreatGroupLifecycleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -132,8 +133,11 @@ class RetreatGroupController extends Controller
         ]);
     }
 
-    public function update(Request $request, RetreatGroup $retreatGroup): RedirectResponse
-    {
+    public function update(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
         $this->authorizeGroupManager($request, $retreatGroup);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:120'],
@@ -201,6 +205,8 @@ class RetreatGroupController extends Controller
             ]);
         }
 
+        $approvalService->invalidateFinalReview($retreatGroup, $request->user(), '团长更新了组团活动信息');
+
         return to_route('retreat.groups.show', $retreatGroup)->with('success', '组团活动信息已更新');
     }
 
@@ -239,7 +245,14 @@ class RetreatGroupController extends Controller
 
     public function show(Request $request, RetreatGroup $retreatGroup): Response
     {
-        $retreatGroup->load(['route.itineraryDays', 'leader', 'applications.user', 'reviews.user', 'smsNotifications']);
+        $retreatGroup->load([
+            'route.itineraryDays',
+            'leader',
+            'applications.user',
+            'reviews.user',
+            'smsNotifications',
+            'approvalNodes.reviewer',
+        ]);
         $retreatGroup->loadSum(['applications as joined_count' => fn ($query) => $query->where('status', 'approved')], 'member_count');
         $canManage = $request->user()->isRetreatAdmin() || $retreatGroup->leader_id === $request->user()->id;
         $leaderApplication = $retreatGroup->applications->firstWhere('user_id', $retreatGroup->leader_id);
@@ -263,12 +276,13 @@ class RetreatGroupController extends Controller
                     'status',
                     'member_count',
                     'contact_mobile',
+                    'family_members',
                     'final_confirmation_status',
                     'final_confirmation_at',
                 ]),
             'canManage' => $canManage,
             'isLeader' => $retreatGroup->leader_id === $request->user()->id,
-            'leaderApplication' => $leaderApplication ? [
+            'leaderApplication' => $canManage && $leaderApplication ? [
                 'id' => $leaderApplication->id,
                 'memberCount' => $leaderApplication->member_count,
                 'familyMembers' => $leaderApplication->family_members ?? [],
@@ -289,7 +303,21 @@ class RetreatGroupController extends Controller
                         'hasMobile' => filled($user->mobile),
                     ])
                 : [],
-            'applications' => $retreatGroup->applications
+            'approvalFlow' => $canManage ? [
+                'status' => $retreatGroup->approval_status,
+                'returnedReason' => $retreatGroup->approval_returned_reason,
+                'nodes' => $retreatGroup->approvalNodes->where('active', true)->values()->map(fn ($node) => [
+                    'id' => $node->id,
+                    'stage' => $node->stage,
+                    'department' => $node->department,
+                    'status' => $node->status,
+                    'reviewer' => $node->reviewer?->name,
+                    'reviewedAt' => $node->reviewed_at?->format('Y-m-d H:i'),
+                    'comment' => $node->comment,
+                    'memberCount' => count($node->member_snapshot ?? []),
+                ]),
+            ] : null,
+            'applications' => ($canManage ? $retreatGroup->applications : collect())
                 ->where('user_id', '!=', $retreatGroup->leader_id)
                 ->values()
                 ->map(fn (RetreatGroupApplication $application) => [
@@ -340,11 +368,16 @@ class RetreatGroupController extends Controller
         ]);
     }
 
-    public function apply(Request $request, RetreatGroup $retreatGroup): RedirectResponse
-    {
+    public function apply(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
         abort_if($retreatGroup->leader_id === $request->user()->id, 422, '团长已自动加入该团队。');
         abort_unless(
-            $retreatGroup->status === 'open' && ! $retreatGroup->application_deadline->isPast(),
+            $retreatGroup->status === 'open'
+                && $retreatGroup->approval_status === 'not_submitted'
+                && ! $retreatGroup->application_deadline->isPast(),
             422,
         );
         $validated = $request->validate([
@@ -389,8 +422,11 @@ class RetreatGroupController extends Controller
             : '参团申请已提交，等待团长审核');
     }
 
-    public function addMember(Request $request, RetreatGroup $retreatGroup): RedirectResponse
-    {
+    public function addMember(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
         $this->authorizeGroupManager($request, $retreatGroup);
         abort_unless($retreatGroup->status === 'open', 422, '仅报名中的团队可以添加成员。');
 
@@ -404,17 +440,27 @@ class RetreatGroupController extends Controller
 
         $memberCount = count($validated['family_members']) + 1;
 
-        DB::transaction(function () use ($request, $retreatGroup, $validated, $memberCount): void {
+        DB::transaction(function () use ($request, $retreatGroup, $validated, $memberCount, $approvalService): void {
             $group = RetreatGroup::query()->lockForUpdate()->findOrFail($retreatGroup->id);
             abort_unless($group->status === 'open', 422, '仅报名中的团队可以添加成员。');
 
-            if ($group->applications()->where('user_id', $validated['user_id'])->exists()) {
+            $existing = $group->applications()->where('user_id', $validated['user_id'])->first();
+            if ($existing && in_array($existing->status, ['pending', 'approved'], true)) {
                 throw ValidationException::withMessages([
                     'user_id' => '该教职工已经提交过本团申请或已经在团内。',
                 ]);
             }
 
             $member = User::query()->findOrFail($validated['user_id']);
+            if (! $member->retreat_eligible) {
+                throw ValidationException::withMessages(['user_id' => '只能添加教师资格清单中的有效成员。']);
+            }
+            if ($group->approval_status !== 'not_submitted'
+                && ! $approvalService->hasActiveDepartmentReviewer($member->department)) {
+                throw ValidationException::withMessages([
+                    'user_id' => "“{$member->department}”尚未配置有效的分院审核人，暂时不能加入该老师。",
+                ]);
+            }
             $contactMobile = trim((string) ($validated['contact_mobile'] ?? $member->mobile));
             if (! preg_match('/^1[3-9]\d{9}$/', $contactMobile)) {
                 throw ValidationException::withMessages([
@@ -429,7 +475,7 @@ class RetreatGroupController extends Controller
                 ]);
             }
 
-            $group->applications()->create([
+            $group->applications()->updateOrCreate(['user_id' => $validated['user_id']], [
                 'user_id' => $validated['user_id'],
                 'member_count' => $memberCount,
                 'family_members' => $validated['family_members'],
@@ -440,13 +486,17 @@ class RetreatGroupController extends Controller
                 'reviewed_at' => now(),
                 'review_comment' => '团长手动添加成员',
             ]);
+            $approvalService->refreshRoster($group, $request->user(), '团长添加了一名正式团员');
         });
 
         return back()->with('success', '团员已添加并自动通过，可登录系统查看和确认行程');
     }
 
-    public function updateLeaderFamily(Request $request, RetreatGroup $retreatGroup): RedirectResponse
-    {
+    public function updateLeaderFamily(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
         $this->authorizeGroupManager($request, $retreatGroup);
         abort_unless($retreatGroup->status === 'open', 422, '仅报名中的团队可以调整团长家属。');
 
@@ -456,7 +506,7 @@ class RetreatGroupController extends Controller
             'family_members.*.relationship' => ['required', 'string', 'max:30'],
         ]);
 
-        DB::transaction(function () use ($retreatGroup, $validated): void {
+        DB::transaction(function () use ($retreatGroup, $validated, $approvalService, $request): void {
             $group = RetreatGroup::query()->lockForUpdate()->findOrFail($retreatGroup->id);
             abort_unless($group->status === 'open', 422, '仅报名中的团队可以调整团长家属。');
 
@@ -477,36 +527,90 @@ class RetreatGroupController extends Controller
                 'member_count' => $memberCount,
                 'family_members' => $validated['family_members'],
             ]);
+            $approvalService->refreshFamilySnapshot($group, $request->user());
         });
 
         return back()->with('success', '团长随行家属已更新');
+    }
+
+    public function updateApplicationFamily(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApplication $application,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
+        abort_unless($application->retreat_group_id === $retreatGroup->id, 404);
+        abort_unless(
+            $request->user()->id === $application->user_id
+                || $request->user()->id === $retreatGroup->leader_id
+                || $request->user()->isRetreatAdmin(),
+            403,
+        );
+        abort_unless($retreatGroup->status === 'open' && $application->status === 'approved', 422);
+        $validated = $request->validate([
+            'family_members' => ['present', 'array', 'max:9'],
+            'family_members.*.name' => ['required', 'string', 'max:50'],
+            'family_members.*.relationship' => ['required', 'string', 'max:30'],
+        ]);
+
+        DB::transaction(function () use ($retreatGroup, $application, $validated, $approvalService, $request): void {
+            $group = RetreatGroup::query()->lockForUpdate()->findOrFail($retreatGroup->id);
+            abort_unless($group->status === 'open' && $application->fresh()->status === 'approved', 422);
+            $memberCount = count($validated['family_members']) + 1;
+            $otherJoined = (int) $group->applications()->where('status', 'approved')
+                ->where('id', '!=', $application->id)->sum('member_count');
+            if ($otherJoined + $memberCount > $group->max_people) {
+                throw ValidationException::withMessages(['family_members' => '调整后人数超过组团上限。']);
+            }
+            $application->update([
+                'family_members' => $validated['family_members'],
+                'member_count' => $memberCount,
+            ]);
+            $approvalService->refreshFamilySnapshot($group, $request->user());
+        });
+
+        return back()->with('success', '随行家属已更新，不影响现有审批结果');
     }
 
     public function reviewApplication(
         Request $request,
         RetreatGroup $retreatGroup,
         RetreatGroupApplication $application,
+        RetreatGroupApprovalService $approvalService,
     ): RedirectResponse {
         abort_unless($request->user()->isRetreatAdmin() || $retreatGroup->leader_id === $request->user()->id, 403);
         abort_unless($application->retreat_group_id === $retreatGroup->id, 404);
+        abort_unless($retreatGroup->status === 'open' && $application->status === 'pending', 422);
         $validated = $request->validate([
             'action' => ['required', 'in:approved,rejected'],
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
 
         if ($validated['action'] === 'approved') {
+            $application->loadMissing('user');
+            if ($retreatGroup->approval_status !== 'not_submitted'
+                && ! $approvalService->hasActiveDepartmentReviewer($application->user->department)) {
+                throw ValidationException::withMessages([
+                    'action' => "“{$application->user->department}”尚未配置有效的分院审核人。",
+                ]);
+            }
             $joined = (int) $retreatGroup->applications()->where('status', 'approved')->sum('member_count');
             if ($joined + $application->member_count > $retreatGroup->max_people) {
                 throw ValidationException::withMessages(['action' => '通过后将超过组团人数上限。']);
             }
         }
 
-        $application->update([
-            'status' => $validated['action'],
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
-            'review_comment' => $validated['comment'] ?? null,
-        ]);
+        DB::transaction(function () use ($request, $retreatGroup, $application, $validated, $approvalService): void {
+            $group = RetreatGroup::query()->lockForUpdate()->findOrFail($retreatGroup->id);
+            abort_unless($group->status === 'open' && $application->fresh()->status === 'pending', 422);
+            $application->update([
+                'status' => $validated['action'],
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+                'review_comment' => $validated['comment'] ?? null,
+            ]);
+            $approvalService->refreshRoster($group, $request->user(), '团长调整了正式团员名单');
+        });
 
         return back()->with('success', $validated['action'] === 'approved' ? '报名申请已通过' : '报名申请已拒绝');
     }
@@ -518,23 +622,59 @@ class RetreatGroupController extends Controller
     ): RedirectResponse {
         $this->authorizeGroupManager($request, $retreatGroup);
         $validated = $request->validate([
-            'action' => ['required', 'in:formed,failed,cancelled'],
+            'action' => ['required', 'in:failed,cancelled'],
             'reason' => ['nullable', 'required_if:action,failed,cancelled', 'string', 'max:1000'],
         ]);
 
         $queued = match ($validated['action']) {
-            'formed' => $lifecycle->form($retreatGroup),
             'failed' => $lifecycle->fail($retreatGroup, $validated['reason']),
             'cancelled' => $lifecycle->cancel($retreatGroup, $validated['reason']),
         };
 
         $message = match ($validated['action']) {
-            'formed' => '团队已成团，最终确认短信任务已生成',
             'failed' => '团队已标记为未成团，通知短信任务已生成',
             'cancelled' => '团队已取消，通知短信任务已生成',
         };
 
         return back()->with('success', "{$message}，共 {$queued} 位接收人");
+    }
+
+    public function submitApproval(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
+        abort_unless($retreatGroup->leader_id === $request->user()->id, 403);
+        $approvalService->submit($retreatGroup, $request->user());
+
+        return back()->with('success', '成团审批已提交，正在等待相关单位并行会签');
+    }
+
+    public function removeMember(
+        Request $request,
+        RetreatGroup $retreatGroup,
+        RetreatGroupApplication $application,
+        RetreatGroupApprovalService $approvalService,
+    ): RedirectResponse {
+        $this->authorizeGroupManager($request, $retreatGroup);
+        abort_unless($retreatGroup->status === 'open', 422);
+        abort_unless($application->retreat_group_id === $retreatGroup->id, 404);
+        abort_if($application->user_id === $retreatGroup->leader_id, 422, '不能移除团长本人。');
+        abort_unless($application->status === 'approved', 422, '该人员当前不在正式团员名单中。');
+
+        DB::transaction(function () use ($request, $retreatGroup, $application, $approvalService): void {
+            $group = RetreatGroup::query()->lockForUpdate()->findOrFail($retreatGroup->id);
+            abort_unless($group->status === 'open' && $application->fresh()->status === 'approved', 422);
+            $application->update([
+                'status' => 'rejected',
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+                'review_comment' => '团长移出团队',
+            ]);
+            $approvalService->refreshRoster($group, $request->user(), '团长移除了一名正式团员');
+        });
+
+        return back()->with('success', '团员已移出，受影响单位将重新会签');
     }
 
     public function remindFinalConfirmation(
@@ -642,12 +782,18 @@ class RetreatGroupController extends Controller
                     ? '已结束'
                     : match ($group->status) {
                         'formed' => '已成团',
-                        default => $group->application_deadline->isPast()
-                            ? '已截止'
-                            : (((int) ($group->joined_count ?? 0)) >= $group->max_people - 2 ? '即将满员' : '报名中'),
+                        default => match ($group->approval_status) {
+                            'pending_departments' => '分院会签中',
+                            'pending_final' => '等待总审核',
+                            'returned' => '审批已退回',
+                            default => $group->application_deadline->isPast()
+                                ? '已截止'
+                                : (((int) ($group->joined_count ?? 0)) >= $group->max_people - 2 ? '即将满员' : '报名中'),
+                        },
                     },
             },
             'rawStatus' => $group->status,
+            'approvalStatus' => $group->approval_status,
             'statusReason' => $group->status_reason,
             'finalConfirmationDeadline' => $group->final_confirmation_deadline?->format('Y-m-d H:i'),
             'confirmationCounts' => $group->relationLoaded('applications') ? [

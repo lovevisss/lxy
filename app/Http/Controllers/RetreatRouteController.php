@@ -127,7 +127,7 @@ class RetreatRouteController extends Controller
             $request->session()->forget("retreat.pdf_drafts.{$pdfDraftToken}");
         }
 
-        return to_route('retreat.approvals')
+        return to_route('retreat.routes.show', $route)
             ->with('success', "线路“{$route->title}”已提交二级单位审批");
     }
 
@@ -136,6 +136,7 @@ class RetreatRouteController extends Controller
         abort_unless(
             $retreatRoute->status === 'approved'
             || $retreatRoute->creator_id === $request->user()->id
+            || $request->user()->isRetreatAdmin()
             || $request->user()->canApproveRetreat(),
             403,
         );
@@ -153,6 +154,7 @@ class RetreatRouteController extends Controller
         abort_unless(
             $retreatRoute->status === 'approved'
             || $retreatRoute->creator_id === $request->user()->id
+            || $request->user()->isRetreatAdmin()
             || $request->user()->canApproveRetreat(),
             403,
         );
@@ -285,6 +287,7 @@ class RetreatRouteController extends Controller
         return [
             'id' => $route->id,
             'title' => $route->title,
+            'providerName' => $route->provider_name,
             'location' => $route->location,
             'region' => $route->region ?: '其他',
             'days' => $route->days,

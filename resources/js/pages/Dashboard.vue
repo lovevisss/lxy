@@ -45,10 +45,10 @@ defineOptions({
 const featured = computed(() => props.dashboard.featuredRoute);
 const activeGroup = computed(() => props.dashboard.nextGroup);
 const userName = computed(() => page.props.auth.user.name);
-const canApprove = computed(() =>
-    ['admin', 'department_approver', 'union_approver'].includes(
-        page.props.auth.user.role ?? '',
-    ),
+const canApprove = computed(
+    () =>
+        page.props.auth.user.can_route_approve ||
+        page.props.auth.user.can_group_approve,
 );
 const currentDate = new Intl.DateTimeFormat('zh-CN', {
     month: 'long',
@@ -391,7 +391,9 @@ const metrics = computed(() => [
                         <Link
                             :href="canApprove ? '/approvals' : '/groups'"
                             class="text-xs text-[#41695c]"
-                            >{{ canApprove ? '进入审批中心' : '查看我的组团' }}</Link
+                            >{{
+                                canApprove ? '进入审批中心' : '查看我的组团'
+                            }}</Link
                         >
                     </div>
                     <div class="mt-5 space-y-2">

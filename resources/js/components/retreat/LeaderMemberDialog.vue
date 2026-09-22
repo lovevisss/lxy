@@ -37,7 +37,9 @@ type AvailableMember = {
 const props = withDefaults(
     defineProps<{
         groupId: number;
-        mode: 'member' | 'leader-family';
+        mode: 'member' | 'leader-family' | 'application-family';
+        applicationId?: number;
+        memberName?: string;
         availableMembers?: AvailableMember[];
         familyMembers?: FamilyMember[];
         remainingCapacity?: number;
@@ -60,7 +62,11 @@ const errors = ref<Record<string, string>>({});
 
 const isMemberMode = computed(() => props.mode === 'member');
 const title = computed(() =>
-    isMemberMode.value ? '添加团员' : '维护我的随行家属',
+    isMemberMode.value
+        ? '添加团员'
+        : props.mode === 'application-family'
+          ? `维护${props.memberName || '团员'}的随行家属`
+          : '维护我的随行家属',
 );
 const totalPeople = computed(() => family.value.length + 1);
 const familyLimit = computed(() => {
@@ -156,7 +162,9 @@ function submit() {
         );
     } else {
         router.put(
-            `/groups/${props.groupId}/leader-family`,
+            props.mode === 'application-family'
+                ? `/groups/${props.groupId}/applications/${props.applicationId}/family`
+                : `/groups/${props.groupId}/leader-family`,
             { family_members: family.value },
             options,
         );
@@ -313,7 +321,12 @@ function submit() {
                     <div>
                         <p class="text-[10px] text-[#77837b]">固定包含</p>
                         <p class="mt-0.5 text-sm font-semibold text-[#294c41]">
-                            团长本人 · 已计入 1 人
+                            {{
+                                mode === 'application-family'
+                                    ? memberName
+                                    : '团长本人'
+                            }}
+                            · 已计入 1 人
                         </p>
                     </div>
                 </div>

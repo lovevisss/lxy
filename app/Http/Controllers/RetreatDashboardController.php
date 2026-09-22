@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\RetreatGroup;
 use App\Models\RetreatGroupApplication;
+use App\Models\RetreatGroupApprovalNode;
 use App\Models\RetreatRoute;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,8 +22,21 @@ class RetreatDashboardController extends Controller
         $pendingRoutes = RetreatRoute::query()
             ->when($user->role === 'department_approver', fn ($query) => $query->where('status', 'pending_department'))
             ->when($user->role === 'union_approver', fn ($query) => $query->where('status', 'pending_union'))
-            ->when($user->isRetreatAdmin(), fn ($query) => $query->whereIn('status', ['pending_department', 'pending_union']))
             ->when(! $user->canApproveRetreat(), fn ($query) => $query->whereRaw('1 = 0'));
+
+        $groupApprovalNodes = RetreatGroupApprovalNode::query()
+            ->with(['group.leader'])
+            ->where('active', true)
+            ->where('status', 'pending')
+            ->whereHas('group', fn ($query) => $query->whereIn('approval_status', ['pending_departments', 'pending_final']))
+            ->when(
+                $user->isGroupFinalReviewer() && $user->isGroupDepartmentReviewer(),
+                fn ($query) => $query->where(fn ($roles) => $roles->where('stage', 'final')
+                    ->orWhere(fn ($department) => $department->where('stage', 'department')->where('department', $user->department))),
+            )
+            ->when($user->isGroupFinalReviewer() && ! $user->isGroupDepartmentReviewer(), fn ($query) => $query->where('stage', 'final'))
+            ->when(! $user->isGroupFinalReviewer() && $user->isGroupDepartmentReviewer(), fn ($query) => $query->where('stage', 'department')->where('department', $user->department))
+            ->when(! $user->canApproveGroup(), fn ($query) => $query->whereRaw('1 = 0'));
 
         $pendingApplications = RetreatGroupApplication::query()
             ->where('status', 'pending')
@@ -58,6 +72,16 @@ class RetreatDashboardController extends Controller
                 'kind' => 'approval',
             ]);
 
+        $groupTodos = $groupApprovalNodes->clone()->oldest()->limit(max(0, 3 - $todos->count()))->get()
+            ->map(fn (RetreatGroupApprovalNode $node) => [
+                'id' => "group-approval-{$node->id}",
+                'title' => $node->group->title.' · '.($node->stage === 'final' ? '成团终审' : '分院会签'),
+                'description' => $node->group->leader->name.' · '.($node->department ?: '全校汇总'),
+                'href' => '/approvals',
+                'kind' => 'approval',
+            ]);
+        $todos = $todos->concat($groupTodos);
+
         $applicationTodos = $pendingApplications->clone()
             ->with(['group', 'user'])
             ->oldest()
@@ -75,7 +99,7 @@ class RetreatDashboardController extends Controller
             'dashboard' => [
                 'approvedRouteCount' => $approvedRoutes->count(),
                 'openGroupCount' => $openGroups->count(),
-                'todoCount' => $pendingRoutes->count() + $pendingApplications->count(),
+                'todoCount' => $pendingRoutes->count() + $groupApprovalNodes->count() + $pendingApplications->count(),
                 'featuredRoute' => $featured ? [
                     'id' => $featured->id,
                     'title' => $featured->title,

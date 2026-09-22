@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\RetreatGroup;
 use App\Models\RetreatGroupApplication;
+use App\Models\RetreatGroupApprovalNode;
 use App\Models\RetreatGroupReview;
+use App\Models\RetreatRoleAssignment;
 use App\Models\RetreatRoute;
 use App\Models\RetreatSmsNotification;
 use App\Models\User;
@@ -23,29 +25,33 @@ class RetreatWorkflowTest extends TestCase
         $admin = User::factory()->create([
             'role' => 'admin',
             'department' => '校工会',
+            'retreat_eligible' => true,
             'email_verified_at' => now(),
         ]);
         $teacher = User::factory()->create([
             'role' => 'teacher',
             'department' => '信息工程学院',
+            'retreat_eligible' => true,
             'email_verified_at' => now(),
         ]);
+        $departmentApprover = User::factory()->create(['role' => 'department_approver', 'department' => '信息工程学院']);
+        $unionApprover = User::factory()->create(['role' => 'union_approver', 'department' => '校工会', 'retreat_eligible' => true]);
 
         $this->actingAs($admin)
             ->post(route('retreat.routes.store'), $this->routePayload())
-            ->assertRedirect(route('retreat.approvals'));
+            ->assertRedirect(route('retreat.routes.show', 1));
 
         $route = RetreatRoute::firstOrFail();
         $this->assertSame('pending_department', $route->status);
         $this->assertCount(2, $route->itineraryDays);
         $this->assertSame(['往返高铁票', '个人消费'], $route->self_funded_items);
 
-        $this->actingAs($admin)
+        $this->actingAs($departmentApprover)
             ->post(route('retreat.approvals.approve', $route), ['comment' => '单位初审通过'])
             ->assertRedirect();
         $this->assertSame('pending_union', $route->fresh()->status);
 
-        $this->actingAs($admin)
+        $this->actingAs($unionApprover)
             ->post(route('retreat.approvals.approve', $route), ['comment' => '校工会终审通过'])
             ->assertRedirect();
         $this->assertSame('approved', $route->fresh()->status);
@@ -107,6 +113,7 @@ class RetreatWorkflowTest extends TestCase
         $directMember = User::factory()->create([
             'role' => 'teacher',
             'department' => '外国语学院',
+            'retreat_eligible' => true,
             'email_verified_at' => now(),
             'mobile' => '13800000004',
         ]);
@@ -131,8 +138,7 @@ class RetreatWorkflowTest extends TestCase
                 ->component('retreat/GroupDetail')
                 ->where('leaderApplication.memberCount', 2)
                 ->where('leaderApplication.familyMembers.0.name', '团长家属')
-                ->has('availableMembers', 1)
-                ->where('availableMembers.0.id', $teacher->id)
+                ->has('availableMembers', 3)
                 ->has('applications', 1)
                 ->where('applications.0.name', $directMember->name)
                 ->where('applications.0.manuallyAdded', true));
@@ -220,8 +226,24 @@ class RetreatWorkflowTest extends TestCase
                 ->where('groupRecord.wechatQrCodeName', '微信群二维码.png')
                 ->where('groupRecord.wechatQrCodeUrl', route('retreat.groups.wechat-qr-code', $group)));
 
-        $this->actingAs($admin)
-            ->post(route('retreat.groups.status', $group), ['action' => 'formed'])
+        $admin->roleAssignments()->create(['role' => RetreatRoleAssignment::DEPARTMENT_REVIEWER, 'scope_department' => '校工会', 'active' => true]);
+        $teacher->roleAssignments()->create(['role' => RetreatRoleAssignment::DEPARTMENT_REVIEWER, 'scope_department' => '信息工程学院', 'active' => true]);
+        $directMember->roleAssignments()->create(['role' => RetreatRoleAssignment::DEPARTMENT_REVIEWER, 'scope_department' => '外国语学院', 'active' => true]);
+        $unionApprover->roleAssignments()->create(['role' => RetreatRoleAssignment::FINAL_REVIEWER, 'active' => true]);
+        $this->actingAs($admin)->post(route('retreat.groups.approval.submit', $group))->assertRedirect();
+        foreach (RetreatGroupApprovalNode::where('retreat_group_id', $group->id)->where('stage', 'department')->get() as $node) {
+            $reviewer = match ($node->department) {
+                '校工会' => $admin,
+                '信息工程学院' => $teacher,
+                default => $directMember,
+            };
+            $this->actingAs($reviewer)
+                ->post(route('retreat.group-approvals.review', $node), ['action' => 'approved'])
+                ->assertRedirect();
+        }
+        $finalNode = RetreatGroupApprovalNode::where('retreat_group_id', $group->id)->where('stage', 'final')->firstOrFail();
+        $this->actingAs($unionApprover)
+            ->post(route('retreat.group-approvals.review', $finalNode), ['action' => 'approved'])
             ->assertRedirect();
         $this->assertSame('formed', $group->fresh()->status);
         $this->assertSame('pending', $application->fresh()->final_confirmation_status);

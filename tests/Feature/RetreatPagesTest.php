@@ -33,9 +33,12 @@ class RetreatPagesTest extends TestCase
 
         $this->actingAs($admin);
 
-        foreach ($this->retreatRoutes() as $routeName) {
+        foreach (array_diff($this->retreatRoutes(), ['retreat.approvals']) as $routeName) {
             $this->get(route($routeName))->assertOk();
         }
+
+        $this->get(route('retreat.approvals'))->assertForbidden();
+        $this->get(route('retreat.permissions'))->assertOk();
 
         $this->get(route('retreat.routes.show', $retreatRoute))->assertOk();
         $this->get(route('retreat.groups.create', ['route' => $retreatRoute]))->assertOk();

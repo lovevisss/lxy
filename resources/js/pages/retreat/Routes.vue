@@ -48,7 +48,7 @@ const filteredRoutes = computed(() =>
         const keyword = search.value.trim().toLowerCase();
         const matchSearch =
             !keyword ||
-            `${route.title}${route.location}${route.summary}${route.tags.join('')}`
+            `${route.title}${route.location}${route.summary}${route.providerName ?? ''}${route.tags.join('')}`
                 .toLowerCase()
                 .includes(keyword);
 
@@ -173,6 +173,12 @@ function toggleFavorite(id: number) {
                                 class="rounded-full bg-[#e3ece6] px-2.5 py-1 text-[10px] font-semibold text-[#356050]"
                             >
                                 工会统一导入
+                            </span>
+                            <span
+                                v-if="route.providerName"
+                                class="rounded-full bg-[#f3eee4] px-2.5 py-1 text-[10px] font-semibold text-[#765d3d]"
+                            >
+                                {{ route.providerName }} 提供
                             </span>
                             <span
                                 v-for="tag in route.tags"

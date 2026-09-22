@@ -20,6 +20,7 @@ class RetreatGroup extends Model
             'failed_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'final_confirmation_deadline' => 'datetime',
+            'approval_submitted_at' => 'datetime',
         ];
     }
 
@@ -46,5 +47,15 @@ class RetreatGroup extends Model
     public function smsNotifications(): HasMany
     {
         return $this->hasMany(RetreatSmsNotification::class);
+    }
+
+    public function approvalNodes(): HasMany
+    {
+        return $this->hasMany(RetreatGroupApprovalNode::class);
+    }
+
+    public function approvalEvents(): HasMany
+    {
+        return $this->hasMany(RetreatGroupApprovalEvent::class);
     }
 }

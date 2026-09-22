@@ -11,6 +11,7 @@ import {
     Filter,
     Search,
     Plane,
+    UsersRound,
 } from '@lucide/vue';
 import { toast } from 'vue-sonner';
 import PageIntro from '@/components/retreat/PageIntro.vue';
@@ -21,6 +22,8 @@ defineOptions({
 
 type ApprovalRecord = {
     id: number;
+    key?: string;
+    kind?: 'route' | 'group';
     routeId?: number;
     type: string;
     title: string;
@@ -29,17 +32,36 @@ type ApprovalRecord = {
     time: string;
     stay: string;
     status: string;
-    days: number;
-    people: string;
-    location: string;
-    summary: string;
-    dailySubsidy: number;
-    estimatedSubsidy: number;
-    selfFundedItems: string[];
-    stage: 'department' | 'union';
+    days?: number;
+    people?: string;
+    location?: string;
+    summary?: string;
+    dailySubsidy?: number;
+    estimatedSubsidy?: number;
+    selfFundedItems?: string[];
+    stage: 'department' | 'union' | 'group_department' | 'group_final';
     decision?: 'approved' | 'rejected';
     comment?: string | null;
-    itinerary: { day: number; title: string }[];
+    itinerary?: { day: number; title: string }[];
+    groupId?: number;
+    routeTitle?: string;
+    date?: string;
+    members?: {
+        user_id: number;
+        name: string;
+        staff_number?: string | null;
+        department: string;
+        family_members: { name: string; relationship: string }[];
+    }[];
+    departmentProgress?: {
+        approved: number;
+        total: number;
+        items: {
+            department: string;
+            status: string;
+            reviewer?: string | null;
+        }[];
+    };
 };
 
 const props = defineProps<{
@@ -54,21 +76,26 @@ const items = computed(() =>
         ? (props.approvalRecords ?? [])
         : (props.approvalHistory ?? []),
 );
-const selectedId = ref(items.value[0]?.id ?? 0);
+const selectedId = ref(items.value[0]?.key ?? String(items.value[0]?.id ?? ''));
 const selected = computed(
     () =>
-        items.value.find((item) => item.id === selectedId.value) ??
-        items.value[0],
+        items.value.find(
+            (item) => (item.key ?? String(item.id)) === selectedId.value,
+        ) ?? items.value[0],
 );
 
 watch(active, () => {
-    selectedId.value = items.value[0]?.id ?? 0;
+    selectedId.value = items.value[0]?.key ?? String(items.value[0]?.id ?? '');
     comment.value = '';
 });
 
 watch(items, (records) => {
-    if (!records.some((item) => item.id === selectedId.value)) {
-        selectedId.value = records[0]?.id ?? 0;
+    if (
+        !records.some(
+            (item) => (item.key ?? String(item.id)) === selectedId.value,
+        )
+    ) {
+        selectedId.value = records[0]?.key ?? String(records[0]?.id ?? '');
     }
 });
 
@@ -86,8 +113,15 @@ function decide(action: '通过' | '退回') {
     }
 
     router.post(
-        `/approvals/${item.id}/${action === '通过' ? 'approve' : 'reject'}`,
-        { comment: comment.value },
+        item.kind === 'group'
+            ? `/group-approvals/${item.id}/review`
+            : `/approvals/${item.id}/${action === '通过' ? 'approve' : 'reject'}`,
+        item.kind === 'group'
+            ? {
+                  action: action === '通过' ? 'approved' : 'rejected',
+                  comment: comment.value,
+              }
+            : { comment: comment.value },
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -95,13 +129,20 @@ function decide(action: '通过' | '退回') {
                 toast.success(action === '通过' ? '审批已通过' : '已退回修改', {
                     description:
                         action === '通过'
-                            ? item.stage === 'department'
-                                ? `${item.title} 已流转至校工会终审。`
-                                : `${item.title} 已正式发布。`
+                            ? item.stage === 'group_department'
+                                ? `${item.title} 的本单位会签已完成。`
+                                : item.stage === 'group_final'
+                                  ? `${item.title} 已正式成团。`
+                                  : item.stage === 'department'
+                                    ? `${item.title} 已流转至校工会终审。`
+                                    : `${item.title} 已正式发布。`
                             : '发起人将收到审批意见。',
                 });
             },
-            onError: () => toast.error('审批处理失败，请检查审批意见'),
+            onError: (errors) =>
+                toast.error('审批处理失败', {
+                    description: Object.values(errors)[0],
+                }),
         },
     );
 }
@@ -116,7 +157,7 @@ function decide(action: '通过' | '退回') {
             <PageIntro
                 eyebrow="Approval desk"
                 title="让每一次出发，都有据可循"
-                description="集中处理本单位线路、扩容与关键变更审批。审批意见和版本差异将完整保留。"
+                description="集中处理线路审批、分院会签与成团终审。每一次处理均保留审批意见。"
             />
             <div class="mt-8 grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
                 <section
@@ -161,15 +202,15 @@ function decide(action: '通过' | '退回') {
                     >
                         <button
                             v-for="item in items"
-                            :key="item.id"
+                            :key="item.key ?? item.id"
                             type="button"
                             :class="[
                                 'w-full p-5 text-left transition',
-                                selectedId === item.id
+                                selectedId === (item.key ?? String(item.id))
                                     ? 'bg-[#f1f3eb]'
                                     : 'hover:bg-[#f8f6ef] dark:hover:bg-muted',
                             ]"
-                            @click="selectedId = item.id"
+                            @click="selectedId = item.key ?? String(item.id)"
                         >
                             <div class="flex items-start gap-4">
                                 <div
@@ -265,100 +306,251 @@ function decide(action: '通过' | '退回') {
                         <span
                             class="rounded-xl border border-[#e1ddd1] px-3 py-2 text-[10px] text-[#8d8a80]"
                             >当前节点：{{
-                                selected.stage === 'union'
-                                    ? '校工会终审'
-                                    : '二级单位初审'
+                                selected.stage === 'group_final'
+                                    ? '成团总审核'
+                                    : selected.stage === 'group_department'
+                                      ? `${selected.department}会签`
+                                      : selected.stage === 'union'
+                                        ? '校工会终审'
+                                        : '二级单位初审'
                             }}</span
                         >
                     </div>
                     <div class="my-6 h-px bg-[#e8e4d9] dark:bg-border" />
-                    <div class="grid gap-3 sm:grid-cols-3">
-                        <div class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted">
-                            <p class="text-[10px] text-[#96948a]">行程天数</p>
-                            <p class="font-serif-cn mt-2 text-lg font-semibold">
-                                {{ selected.days }} 天
-                            </p>
-                        </div>
-                        <div class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted">
-                            <p class="text-[10px] text-[#96948a]">适用人数</p>
-                            <p class="font-serif-cn mt-2 text-lg font-semibold">
-                                {{ selected.people }}
-                            </p>
-                        </div>
-                        <div class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted">
-                            <p class="text-[10px] text-[#96948a]">主要目的地</p>
-                            <p class="font-serif-cn mt-2 text-lg font-semibold">
-                                {{ selected.location }}
-                            </p>
-                        </div>
-                    </div>
-                    <div
-                        class="mt-4 grid overflow-hidden rounded-2xl border border-[#e2c78f] bg-[#fff8e9] sm:grid-cols-[210px_1fr]"
-                    >
-                        <div class="bg-[#a75a3b] p-4 text-white">
-                            <p
-                                class="flex items-center gap-2 text-[10px] text-white/65"
+                    <div v-if="selected.kind === 'group'" class="space-y-5">
+                        <div class="grid gap-3 sm:grid-cols-3">
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
                             >
-                                <CircleDollarSign class="size-4" />经费审核要点
-                            </p>
-                            <p class="font-serif-cn mt-2 text-lg font-semibold">
-                                {{ selected.dailySubsidy }} 元/人/天
-                            </p>
-                            <p class="mt-1 text-[10px] text-white/60">
-                                {{ selected.days }} 天参考补助
-                                {{ selected.estimatedSubsidy }} 元/人
-                            </p>
-                        </div>
-                        <div class="p-4">
-                            <p
-                                class="flex items-center gap-2 text-[10px] font-semibold text-[#75452f]"
+                                <p class="text-[10px] text-[#96948a]">
+                                    采用线路
+                                </p>
+                                <p class="mt-2 text-sm font-semibold">
+                                    {{ selected.routeTitle }}
+                                </p>
+                            </div>
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
                             >
-                                <Plane class="size-3.5" />申报的个人自理项目
-                            </p>
-                            <p class="mt-2 text-xs leading-6 text-[#75695f]">
-                                {{ selected.selfFundedItems.join('；') }}
-                            </p>
+                                <p class="text-[10px] text-[#96948a]">
+                                    出行日期
+                                </p>
+                                <p class="mt-2 text-sm font-semibold">
+                                    {{ selected.date }}
+                                </p>
+                            </div>
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
+                            >
+                                <p class="text-[10px] text-[#96948a]">
+                                    正式团员
+                                </p>
+                                <p class="mt-2 text-sm font-semibold">
+                                    {{ selected.members?.length ?? 0 }} 位老师
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="mt-6">
-                        <h3 class="text-xs font-semibold text-[#425c53]">
-                            线路摘要
-                        </h3>
-                        <p
-                            class="mt-3 rounded-2xl border border-[#e2ded2] p-4 text-xs leading-6 text-[#74776f]"
+                        <div
+                            v-if="selected.stage === 'group_final'"
+                            class="rounded-2xl border border-[#dce5df] bg-[#f2f6f1] p-4 text-xs"
                         >
-                            {{ selected.summary }}
-                        </p>
-                    </div>
-                    <div class="mt-6">
-                        <div class="flex items-center justify-between">
-                            <h3 class="text-xs font-semibold text-[#425c53]">
-                                逐日行程
-                            </h3>
-                            <Link
-                                :href="`/routes/${selected.routeId ?? selected.id}`"
-                                class="text-[10px] font-semibold text-[#b45b3d]"
-                            >
-                                查看完整材料
-                            </Link>
-                        </div>
-                        <ol
-                            class="mt-4 space-y-3 border-l border-[#d7d3c6] pl-5"
-                        >
-                            <li
-                                v-for="day in selected.itinerary"
-                                :key="day.day"
-                                class="relative text-xs text-[#666b64]"
-                            >
+                            <div class="flex items-center justify-between">
+                                <p class="font-semibold text-[#31594c]">
+                                    分院会签进度
+                                </p>
+                                <span class="text-[#698174]"
+                                    >{{ selected.departmentProgress?.approved }}
+                                    /
+                                    {{ selected.departmentProgress?.total }}
+                                    已通过</span
+                                >
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
                                 <span
-                                    class="absolute -left-[25px] grid size-3 place-items-center rounded-full bg-[#c06140] ring-4 ring-[#fffefa]"
-                                /><span
-                                    class="font-serif-cn mr-2 font-semibold text-[#2c5346]"
-                                    >D{{ day.day }}</span
-                                >{{ day.title }}
-                            </li>
-                        </ol>
+                                    v-for="node in selected.departmentProgress
+                                        ?.items"
+                                    :key="node.department"
+                                    class="rounded-full bg-white px-3 py-1.5 text-[10px] text-[#577368]"
+                                    >{{ node.department }} ·
+                                    {{
+                                        node.status === 'approved'
+                                            ? '已通过'
+                                            : '待审核'
+                                    }}</span
+                                >
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <h3
+                                    class="inline-flex items-center gap-2 text-xs font-semibold text-[#425c53]"
+                                >
+                                    <UsersRound class="size-4" />{{
+                                        selected.stage === 'group_final'
+                                            ? '整团正式团员'
+                                            : '本单位正式团员'
+                                    }}
+                                </h3>
+                                <Link
+                                    :href="`/groups/${selected.groupId}`"
+                                    class="text-[10px] font-semibold text-[#b45b3d]"
+                                    >查看组团详情</Link
+                                >
+                            </div>
+                            <div
+                                class="mt-3 divide-y divide-[#e8e4d9] overflow-hidden rounded-2xl border border-[#e2ded2]"
+                            >
+                                <article
+                                    v-for="member in selected.members"
+                                    :key="member.user_id"
+                                    class="p-4 text-xs"
+                                >
+                                    <div
+                                        class="flex items-center justify-between"
+                                    >
+                                        <p class="font-semibold text-[#315448]">
+                                            {{ member.name }}
+                                        </p>
+                                        <span class="text-[#928f86]"
+                                            >{{ member.department }} ·
+                                            {{
+                                                member.staff_number || '无工号'
+                                            }}</span
+                                        >
+                                    </div>
+                                    <p
+                                        v-if="member.family_members?.length"
+                                        class="mt-2 text-[10px] text-[#89867e]"
+                                    >
+                                        随行家属：{{
+                                            member.family_members
+                                                .map(
+                                                    (family) =>
+                                                        `${family.name}（${family.relationship}）`,
+                                                )
+                                                .join('、')
+                                        }}
+                                        · 家属不参与会签
+                                    </p>
+                                </article>
+                            </div>
+                        </div>
                     </div>
+                    <template v-else>
+                        <div class="grid gap-3 sm:grid-cols-3">
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
+                            >
+                                <p class="text-[10px] text-[#96948a]">
+                                    行程天数
+                                </p>
+                                <p
+                                    class="font-serif-cn mt-2 text-lg font-semibold"
+                                >
+                                    {{ selected.days }} 天
+                                </p>
+                            </div>
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
+                            >
+                                <p class="text-[10px] text-[#96948a]">
+                                    适用人数
+                                </p>
+                                <p
+                                    class="font-serif-cn mt-2 text-lg font-semibold"
+                                >
+                                    {{ selected.people }}
+                                </p>
+                            </div>
+                            <div
+                                class="rounded-2xl bg-[#f3f1e8] p-4 dark:bg-muted"
+                            >
+                                <p class="text-[10px] text-[#96948a]">
+                                    主要目的地
+                                </p>
+                                <p
+                                    class="font-serif-cn mt-2 text-lg font-semibold"
+                                >
+                                    {{ selected.location }}
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            class="mt-4 grid overflow-hidden rounded-2xl border border-[#e2c78f] bg-[#fff8e9] sm:grid-cols-[210px_1fr]"
+                        >
+                            <div class="bg-[#a75a3b] p-4 text-white">
+                                <p
+                                    class="flex items-center gap-2 text-[10px] text-white/65"
+                                >
+                                    <CircleDollarSign
+                                        class="size-4"
+                                    />经费审核要点
+                                </p>
+                                <p
+                                    class="font-serif-cn mt-2 text-lg font-semibold"
+                                >
+                                    {{ selected.dailySubsidy }} 元/人/天
+                                </p>
+                                <p class="mt-1 text-[10px] text-white/60">
+                                    {{ selected.days }} 天参考补助
+                                    {{ selected.estimatedSubsidy }} 元/人
+                                </p>
+                            </div>
+                            <div class="p-4">
+                                <p
+                                    class="flex items-center gap-2 text-[10px] font-semibold text-[#75452f]"
+                                >
+                                    <Plane class="size-3.5" />申报的个人自理项目
+                                </p>
+                                <p
+                                    class="mt-2 text-xs leading-6 text-[#75695f]"
+                                >
+                                    {{ selected.selfFundedItems?.join('；') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <h3 class="text-xs font-semibold text-[#425c53]">
+                                线路摘要
+                            </h3>
+                            <p
+                                class="mt-3 rounded-2xl border border-[#e2ded2] p-4 text-xs leading-6 text-[#74776f]"
+                            >
+                                {{ selected.summary }}
+                            </p>
+                        </div>
+                        <div class="mt-6">
+                            <div class="flex items-center justify-between">
+                                <h3
+                                    class="text-xs font-semibold text-[#425c53]"
+                                >
+                                    逐日行程
+                                </h3>
+                                <Link
+                                    :href="`/routes/${selected.routeId ?? selected.id}`"
+                                    class="text-[10px] font-semibold text-[#b45b3d]"
+                                >
+                                    查看完整材料
+                                </Link>
+                            </div>
+                            <ol
+                                class="mt-4 space-y-3 border-l border-[#d7d3c6] pl-5"
+                            >
+                                <li
+                                    v-for="day in selected.itinerary"
+                                    :key="day.day"
+                                    class="relative text-xs text-[#666b64]"
+                                >
+                                    <span
+                                        class="absolute -left-[25px] grid size-3 place-items-center rounded-full bg-[#c06140] ring-4 ring-[#fffefa]"
+                                    /><span
+                                        class="font-serif-cn mr-2 font-semibold text-[#2c5346]"
+                                        >D{{ day.day }}</span
+                                    >{{ day.title }}
+                                </li>
+                            </ol>
+                        </div>
+                    </template>
                     <label v-if="active === '待我审批'" class="mt-7 block"
                         ><span class="mb-2 block text-xs font-semibold"
                             >审批意见</span

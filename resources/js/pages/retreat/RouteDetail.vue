@@ -155,6 +155,12 @@ defineOptions({
                     >
                         {{ route.title }}
                     </h1>
+                    <p
+                        v-if="route.providerName"
+                        class="mt-2 text-xs font-semibold text-[#6c725e]"
+                    >
+                        线路提供方：{{ route.providerName }}
+                    </p>
                     <p class="mt-4 text-sm leading-7 text-[#747870]">
                         {{ route.summary }}
                     </p>

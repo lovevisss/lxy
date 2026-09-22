@@ -12,6 +12,10 @@ class RetreatGroupLifecycleService
 
     public function form(RetreatGroup $group): int
     {
+        if ($group->approval_status !== 'approved') {
+            throw ValidationException::withMessages(['action' => '成团终审通过后才能正式成团。']);
+        }
+
         if ($group->status !== 'open') {
             throw ValidationException::withMessages(['action' => '当前团队状态无法执行成团操作。']);
         }
@@ -68,6 +72,7 @@ class RetreatGroupLifecycleService
                 'failed_at' => now(),
                 'final_confirmation_deadline' => null,
             ]);
+            $group->approvalNodes()->where('active', true)->update(['active' => false]);
             $group->applications()->update([
                 'final_confirmation_status' => 'not_required',
                 'final_confirmation_at' => null,
@@ -97,6 +102,7 @@ class RetreatGroupLifecycleService
                 'cancelled_at' => now(),
                 'final_confirmation_deadline' => null,
             ]);
+            $group->approvalNodes()->where('active', true)->update(['active' => false]);
             $group->applications()->update([
                 'final_confirmation_status' => 'not_required',
                 'final_confirmation_at' => null,

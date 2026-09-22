@@ -4,6 +4,7 @@ use App\Http\Controllers\CasAuthController;
 use App\Http\Controllers\RetreatApprovalController;
 use App\Http\Controllers\RetreatDashboardController;
 use App\Http\Controllers\RetreatGroupController;
+use App\Http\Controllers\RetreatPermissionController;
 use App\Http\Controllers\RetreatRouteController;
 use App\Http\Controllers\RetreatRouteImportController;
 use App\Http\Middleware\EnsureRetreatEligible;
@@ -37,6 +38,10 @@ Route::middleware(['auth', 'verified', EnsureRetreatEligible::class])->group(fun
     Route::get('approvals', [RetreatApprovalController::class, 'index'])->name('retreat.approvals');
     Route::post('approvals/{retreatRoute}/approve', [RetreatApprovalController::class, 'approve'])->name('retreat.approvals.approve');
     Route::post('approvals/{retreatRoute}/reject', [RetreatApprovalController::class, 'reject'])->name('retreat.approvals.reject');
+    Route::post('group-approvals/{approvalNode}/review', [RetreatApprovalController::class, 'reviewGroup'])->name('retreat.group-approvals.review');
+
+    Route::get('permissions', [RetreatPermissionController::class, 'index'])->name('retreat.permissions');
+    Route::put('permissions/users/{user}', [RetreatPermissionController::class, 'update'])->name('retreat.permissions.update');
 
     Route::get('groups', [RetreatGroupController::class, 'index'])->name('retreat.groups');
     Route::get('groups/create', [RetreatGroupController::class, 'create'])->name('retreat.groups.create');
@@ -49,8 +54,11 @@ Route::middleware(['auth', 'verified', EnsureRetreatEligible::class])->group(fun
     Route::post('groups/{retreatGroup}/applications', [RetreatGroupController::class, 'apply'])->name('retreat.groups.applications.store');
     Route::post('groups/{retreatGroup}/members', [RetreatGroupController::class, 'addMember'])->name('retreat.groups.members.store');
     Route::put('groups/{retreatGroup}/leader-family', [RetreatGroupController::class, 'updateLeaderFamily'])->name('retreat.groups.leader-family.update');
+    Route::put('groups/{retreatGroup}/applications/{application}/family', [RetreatGroupController::class, 'updateApplicationFamily'])->name('retreat.groups.applications.family.update');
     Route::post('groups/{retreatGroup}/applications/{application}/review', [RetreatGroupController::class, 'reviewApplication'])->name('retreat.groups.applications.review');
     Route::post('groups/{retreatGroup}/status', [RetreatGroupController::class, 'changeStatus'])->name('retreat.groups.status');
+    Route::post('groups/{retreatGroup}/submit-approval', [RetreatGroupController::class, 'submitApproval'])->name('retreat.groups.approval.submit');
+    Route::delete('groups/{retreatGroup}/members/{application}', [RetreatGroupController::class, 'removeMember'])->name('retreat.groups.members.destroy');
     Route::post('groups/{retreatGroup}/final-confirmation', [RetreatGroupController::class, 'confirmParticipation'])->name('retreat.groups.final-confirmation');
     Route::post('groups/{retreatGroup}/final-confirmation/remind', [RetreatGroupController::class, 'remindFinalConfirmation'])->name('retreat.groups.final-confirmation.remind');
 });

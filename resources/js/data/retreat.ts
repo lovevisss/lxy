@@ -1,6 +1,7 @@
 export type RetreatRoute = {
     id: number;
     title: string;
+    providerName?: string | null;
     location: string;
     region: string;
     days: number;
@@ -59,7 +60,10 @@ export type RetreatGroup = {
         | '已截止'
         | '已结束'
         | '未成团'
-        | '已取消';
+        | '已取消'
+        | '分院会签中'
+        | '等待总审核'
+        | '审批已退回';
     palette: string;
     location?: string;
     region?: string;
@@ -79,6 +83,12 @@ export type RetreatGroup = {
     finalConfirmationStatus?:
         'not_required' | 'pending' | 'confirmed' | 'declined';
     rawStatus?: 'open' | 'formed' | 'failed' | 'cancelled';
+    approvalStatus?:
+        | 'not_submitted'
+        | 'pending_departments'
+        | 'pending_final'
+        | 'returned'
+        | 'approved';
     statusReason?: string | null;
     finalConfirmationDeadline?: string | null;
     confirmationCounts?: {

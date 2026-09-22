@@ -51,6 +51,26 @@ type ApplicationRecord = {
     submittedAt: string;
 };
 
+type ApprovalFlow = {
+    status:
+        | 'not_submitted'
+        | 'pending_departments'
+        | 'pending_final'
+        | 'returned'
+        | 'approved';
+    returnedReason?: string | null;
+    nodes: {
+        id: number;
+        stage: 'department' | 'final';
+        department?: string | null;
+        status: string;
+        reviewer?: string | null;
+        reviewedAt?: string | null;
+        comment?: string | null;
+        memberCount: number;
+    }[];
+};
+
 type AvailableMember = {
     id: number;
     name: string;
@@ -98,6 +118,7 @@ const props = defineProps<{
         status: 'pending' | 'approved' | 'rejected';
         member_count: number;
         contact_mobile?: string | null;
+        family_members?: { name: string; relationship: string }[];
         final_confirmation_status:
             'not_required' | 'pending' | 'confirmed' | 'declined';
         final_confirmation_at?: string | null;
@@ -123,16 +144,23 @@ const props = defineProps<{
         sent: number;
         provider: string;
     };
+    approvalFlow?: ApprovalFlow;
 }>();
-const group =
-    props.groupRecord ??
-    retreatGroups.find((item) => item.id === props.groupId) ??
-    retreatGroups[0];
-const route =
-    props.routeRecord ??
-    retreatRoutes.find((item) => item.title === group.route) ??
-    retreatRoutes[0];
-const itinerary = props.itineraryRecord ?? itineraryByRouteId(route.id);
+const group = computed(
+    () =>
+        props.groupRecord ??
+        retreatGroups.find((item) => item.id === props.groupId) ??
+        retreatGroups[0],
+);
+const route = computed(
+    () =>
+        props.routeRecord ??
+        retreatRoutes.find((item) => item.title === group.value.route) ??
+        retreatRoutes[0],
+);
+const itinerary = computed(
+    () => props.itineraryRecord ?? itineraryByRouteId(route.value.id),
+);
 const applicationStatus = ref(props.currentApplication?.status ?? null);
 const finalConfirmationStatus = ref(
     props.currentApplication?.final_confirmation_status ?? 'not_required',
@@ -140,7 +168,7 @@ const finalConfirmationStatus = ref(
 const lifecycleReason = ref('');
 const lifecycleProcessing = ref(false);
 const progress = computed(() =>
-    Math.min(100, (group.joined / group.capacity) * 100),
+    Math.min(100, (group.value.joined / group.value.capacity) * 100),
 );
 const reviewDimensions = computed(() => [
     { label: '路线安排', value: props.reviewSummary?.route },
@@ -161,7 +189,7 @@ defineOptions({
 
 function reviewApplication(id: number, action: 'approved' | 'rejected') {
     router.post(
-        `/groups/${group.id}/applications/${id}/review`,
+        `/groups/${group.value.id}/applications/${id}/review`,
         { action, comment: '' },
         {
             preserveScroll: true,
@@ -174,15 +202,15 @@ function reviewApplication(id: number, action: 'approved' | 'rejected') {
     );
 }
 
-function changeGroupStatus(action: 'formed' | 'failed' | 'cancelled') {
-    if (action !== 'formed' && !lifecycleReason.value.trim()) {
+function changeGroupStatus(action: 'failed' | 'cancelled') {
+    if (!lifecycleReason.value.trim()) {
         toast.warning('请先填写原因，短信中会同步告知团员');
 
         return;
     }
 
     router.post(
-        `/groups/${group.id}/status`,
+        `/groups/${group.value.id}/status`,
         { action, reason: lifecycleReason.value },
         {
             preserveScroll: true,
@@ -191,11 +219,9 @@ function changeGroupStatus(action: 'formed' | 'failed' | 'cancelled') {
             onSuccess: () => {
                 lifecycleReason.value = '';
                 toast.success(
-                    action === 'formed'
-                        ? '已成团并生成最终确认短信任务'
-                        : action === 'failed'
-                          ? '未成团通知任务已生成'
-                          : '取消通知任务已生成',
+                    action === 'failed'
+                        ? '未成团通知任务已生成'
+                        : '取消通知任务已生成',
                 );
             },
             onError: (errors) =>
@@ -206,9 +232,39 @@ function changeGroupStatus(action: 'formed' | 'failed' | 'cancelled') {
     );
 }
 
+function submitGroupApproval() {
+    router.post(
+        `/groups/${group.value.id}/submit-approval`,
+        {},
+        {
+            preserveScroll: true,
+            onStart: () => (lifecycleProcessing.value = true),
+            onFinish: () => (lifecycleProcessing.value = false),
+            onSuccess: () => toast.success('已提交成团审批'),
+            onError: (errors) =>
+                toast.error('提交失败', {
+                    description: Object.values(errors)[0],
+                }),
+        },
+    );
+}
+
+function removeMember(id: number) {
+    if (!window.confirm('确定移出这名正式团员吗？受影响单位将重新会签。')) {
+        return;
+    }
+
+    router.delete(`/groups/${group.value.id}/members/${id}`, {
+        preserveScroll: true,
+        onSuccess: () => toast.success('团员已移出'),
+        onError: (errors) =>
+            toast.error('移出失败', { description: Object.values(errors)[0] }),
+    });
+}
+
 function confirmParticipation(action: 'confirmed' | 'declined') {
     router.post(
-        `/groups/${group.id}/final-confirmation`,
+        `/groups/${group.value.id}/final-confirmation`,
         { action },
         {
             preserveScroll: true,
@@ -230,7 +286,7 @@ function confirmParticipation(action: 'confirmed' | 'declined') {
 
 function remindFinalConfirmation() {
     router.post(
-        `/groups/${group.id}/final-confirmation/remind`,
+        `/groups/${group.value.id}/final-confirmation/remind`,
         {},
         {
             preserveScroll: true,
@@ -442,6 +498,29 @@ function remindFinalConfirmation() {
                         <BadgeCheck class="size-5" />
                         本团{{ group.status }}，暂不接受新报名
                     </div>
+                    <LeaderMemberDialog
+                        v-if="
+                            !isLeader &&
+                            applicationStatus === 'approved' &&
+                            group.rawStatus === 'open' &&
+                            currentApplication
+                        "
+                        :group-id="group.id"
+                        mode="application-family"
+                        :application-id="currentApplication.id"
+                        member-name="我"
+                        :family-members="
+                            currentApplication.family_members ?? []
+                        "
+                        :remaining-capacity="group.capacity - group.joined"
+                    >
+                        <button
+                            type="button"
+                            class="mt-3 w-full rounded-full border border-[#d9d5c8] px-4 py-2 text-xs font-semibold text-[#42685b]"
+                        >
+                            维护我的随行家属
+                        </button>
+                    </LeaderMemberDialog>
                 </div>
             </section>
 
@@ -654,7 +733,7 @@ function remindFinalConfirmation() {
                         <h2
                             class="font-serif-cn mt-1 text-xl font-semibold text-[#294b40]"
                         >
-                            成团与短信通知
+                            成团审批与短信通知
                         </h2>
                     </div>
                     <div class="flex gap-2 text-[10px]">
@@ -674,7 +753,7 @@ function remindFinalConfirmation() {
                     <div>
                         <template v-if="group.rawStatus === 'open'">
                             <p class="text-xs leading-6 text-[#737870]">
-                                达到最低人数后可手动确认成团；报名截止后系统也会自动判断。成团时会为已审核团员生成登录系统完成最终确认的短信任务。
+                                达到最低人数并处理完报名申请后提交成团审批。涉及单位并行会签，全部通过后由总审核人终审；终审通过后才会生成最终确认短信任务。
                             </p>
                             <label class="mt-4 block">
                                 <span
@@ -758,15 +837,21 @@ function remindFinalConfirmation() {
                     </div>
                     <div class="flex flex-col justify-center gap-2">
                         <button
-                            v-if="group.rawStatus === 'open'"
+                            v-if="
+                                isLeader &&
+                                group.rawStatus === 'open' &&
+                                ['not_submitted', 'returned'].includes(
+                                    group.approvalStatus ?? 'not_submitted',
+                                )
+                            "
                             type="button"
                             :disabled="
                                 lifecycleProcessing || group.joined < group.min
                             "
                             class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1d4b3e] px-5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                            @click="changeGroupStatus('formed')"
+                            @click="submitGroupApproval"
                         >
-                            <BadgeCheck class="size-4" />确认成团并通知
+                            <BadgeCheck class="size-4" />提交成团审批
                         </button>
                         <button
                             v-if="group.rawStatus === 'open'"
@@ -801,6 +886,95 @@ function remindFinalConfirmation() {
                             }}；当前先记录待发送任务与手机号。
                         </p>
                     </div>
+                </div>
+            </section>
+
+            <section
+                v-if="
+                    canManage &&
+                    approvalFlow &&
+                    approvalFlow.status !== 'not_submitted'
+                "
+                class="mt-6 overflow-hidden rounded-[26px] border border-[#dfdcd0] bg-[#fffefa] dark:border-border dark:bg-card"
+            >
+                <div
+                    class="border-b border-[#e5e0d4] bg-[#f3f1e8] p-5 md:px-8 dark:border-border dark:bg-muted"
+                >
+                    <p
+                        class="text-[10px] font-semibold tracking-[.18em] text-[#b25c3d] uppercase"
+                    >
+                        Approval journey
+                    </p>
+                    <h2
+                        class="font-serif-cn mt-1 text-xl font-semibold text-[#294b40] dark:text-foreground"
+                    >
+                        成团审核进度
+                    </h2>
+                    <p
+                        v-if="approvalFlow.returnedReason"
+                        class="mt-3 rounded-xl border border-[#ead8cd] bg-[#fff7f0] p-3 text-xs text-[#96583f]"
+                    >
+                        退回原因：{{ approvalFlow.returnedReason }}
+                    </p>
+                </div>
+                <div class="grid gap-3 p-5 md:grid-cols-2 md:p-8">
+                    <article
+                        v-for="node in approvalFlow.nodes"
+                        :key="node.id"
+                        class="rounded-2xl border border-[#e1ded2] bg-[#faf9f3] p-4 dark:border-border dark:bg-card"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p
+                                    class="text-sm font-semibold text-[#2d5547] dark:text-foreground"
+                                >
+                                    {{
+                                        node.stage === 'final'
+                                            ? '成团总审核'
+                                            : node.department
+                                    }}
+                                </p>
+                                <p class="mt-1 text-[10px] text-[#96948a]">
+                                    {{
+                                        node.stage === 'final'
+                                            ? '全部正式团员'
+                                            : `${node.memberCount} 位正式团员`
+                                    }}
+                                </p>
+                            </div>
+                            <span
+                                :class="[
+                                    'rounded-full px-2.5 py-1 text-[10px] font-semibold',
+                                    node.status === 'approved'
+                                        ? 'bg-[#e3eee8] text-[#2c654f]'
+                                        : node.status === 'rejected'
+                                          ? 'bg-[#f8e9e2] text-[#a1563b]'
+                                          : 'bg-[#f4eddc] text-[#8b7041]',
+                                ]"
+                                >{{
+                                    node.status === 'approved'
+                                        ? '已通过'
+                                        : node.status === 'rejected'
+                                          ? '已退回'
+                                          : node.status === 'waiting'
+                                            ? '等待分院会签'
+                                            : '待审核'
+                                }}</span
+                            >
+                        </div>
+                        <p
+                            v-if="node.reviewer"
+                            class="mt-3 text-[10px] text-[#8e8b82]"
+                        >
+                            {{ node.reviewer }} · {{ node.reviewedAt }}
+                        </p>
+                        <p
+                            v-if="node.comment"
+                            class="mt-2 text-xs leading-5 text-[#6d756d]"
+                        >
+                            {{ node.comment }}
+                        </p>
+                    </article>
                 </div>
             </section>
 
@@ -977,21 +1151,52 @@ function remindFinalConfirmation() {
                                 通过
                             </button>
                         </div>
-                        <span
-                            v-else
-                            :class="[
-                                'rounded-full px-3 py-1.5 text-xs font-semibold',
-                                application.status === 'approved'
-                                    ? 'bg-[#e6eee8] text-[#396052]'
-                                    : 'bg-[#f2e8e4] text-[#94533f]',
-                            ]"
-                        >
-                            {{
-                                application.status === 'approved'
-                                    ? '已通过'
-                                    : '已拒绝'
-                            }}
-                        </span>
+                        <div v-else class="flex items-center gap-2">
+                            <LeaderMemberDialog
+                                v-if="
+                                    application.status === 'approved' &&
+                                    group.rawStatus === 'open'
+                                "
+                                :group-id="group.id"
+                                mode="application-family"
+                                :application-id="application.id"
+                                :member-name="application.name"
+                                :family-members="application.familyMembers"
+                                :remaining-capacity="
+                                    group.capacity - group.joined
+                                "
+                                ><button
+                                    type="button"
+                                    class="rounded-full border border-[#d9d5c8] px-3 py-1.5 text-[10px] font-semibold text-[#42685b]"
+                                >
+                                    家属
+                                </button></LeaderMemberDialog
+                            >
+                            <span
+                                :class="[
+                                    'rounded-full px-3 py-1.5 text-xs font-semibold',
+                                    application.status === 'approved'
+                                        ? 'bg-[#e6eee8] text-[#396052]'
+                                        : 'bg-[#f2e8e4] text-[#94533f]',
+                                ]"
+                                >{{
+                                    application.status === 'approved'
+                                        ? '已通过'
+                                        : '已拒绝'
+                                }}</span
+                            >
+                            <button
+                                v-if="
+                                    application.status === 'approved' &&
+                                    group.rawStatus === 'open'
+                                "
+                                type="button"
+                                class="rounded-full border border-[#dfb7aa] px-3 py-1.5 text-[10px] font-semibold text-[#a3573f]"
+                                @click="removeMember(application.id)"
+                            >
+                                移出
+                            </button>
+                        </div>
                     </article>
                 </div>
                 <div

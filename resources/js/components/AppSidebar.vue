@@ -7,6 +7,7 @@ import {
     LayoutDashboard,
     LifeBuoy,
     MapPinned,
+    ShieldCog,
     UsersRound,
 } from '@lucide/vue';
 import { computed } from 'vue';
@@ -42,15 +43,22 @@ const mainNavItems = computed<NavItem[]>(() => [
         href: '/groups',
         icon: UsersRound,
     },
-    ...(page.props.auth.user.role &&
-    ['admin', 'department_approver', 'union_approver'].includes(
-        page.props.auth.user.role,
-    )
+    ...(page.props.auth.user.can_route_approve ||
+    page.props.auth.user.can_group_approve
         ? [
               {
                   title: '审批中心',
                   href: '/approvals',
                   icon: BadgeCheck,
+              },
+          ]
+        : []),
+    ...(page.props.auth.user.is_admin
+        ? [
+              {
+                  title: '权限配置',
+                  href: '/permissions',
+                  icon: ShieldCog,
               },
           ]
         : []),

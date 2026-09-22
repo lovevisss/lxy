@@ -11,9 +11,20 @@ class RetreatRoutePdfParser
     /** @return array<string, mixed> */
     public function parse(string $path): array
     {
+        if (! class_exists(Parser::class)) {
+            throw new RuntimeException('服务器缺少 PDF 解析组件，请管理员执行 composer install 后重试。');
+        }
+        if (! is_file($path) || ! is_readable($path)) {
+            throw new RuntimeException('服务器无法读取已上传文件，请管理员检查 storage 目录权限。');
+        }
+        if (! str_starts_with((string) file_get_contents($path, false, null, 0, 5), '%PDF-')) {
+            throw new RuntimeException('文件扩展名为 PDF，但实际内容不是有效的 PDF 文件。');
+        }
+
         try {
             $text = (new Parser)->parseFile($path)->getText();
         } catch (\Throwable $exception) {
+            report($exception);
             throw new RuntimeException('PDF 无法读取，请确认文件未加密且内容完整。', previous: $exception);
         }
 
@@ -30,7 +41,7 @@ class RetreatRoutePdfParser
 
         $days = $this->parseDays($text);
         if ($days === []) {
-            throw new RuntimeException('未识别到 D1、D2 等逐日行程，请改用标准 CSV 模板导入。');
+            throw new RuntimeException('未识别到逐日行程；请上传含 D1/D2 或日期分段的行程方案。');
         }
 
         $title = $this->match('/【([^】]{4,80}(?:疗休养|行程)[^】]*)】/u', $text)
@@ -44,6 +55,9 @@ class RetreatRoutePdfParser
             : '根据上传的疗休养方案自动解析生成，请在提交前核对线路内容。';
 
         $notices = $this->numberedItems($this->between($text, '注意\n事项', '费用'));
+        if ($notices === []) {
+            $notices = $this->numberedItems($this->between($text, '温馨提示:', '“文明旅游'));
+        }
         $price = $this->match('/(\d+(?:\.\d+)?元\/人[^\n]*)/u', $text);
         if ($price) {
             $notices[] = '原方案参考费用：'.$this->oneLine($price).'；系统经费仍按工会每人每天 500 元政策执行。';
@@ -57,27 +71,36 @@ class RetreatRoutePdfParser
             ->values()
             ->all();
 
+        $declaredPeople = $this->declaredPeople($text);
+        $hotelStandard = $this->serviceField($text, '住宿', '用\s*餐', '住宿');
+        $mealStandard = $this->serviceField($text, '用\s*餐', '交通', '餐费');
+        $localTransport = $this->serviceField($text, '交通', '门票', '交通');
+        $ticketStandard = $this->serviceField($text, '门票', '导\s*服', '门票');
+        $guideService = $this->serviceField($text, '导\s*服', '保险', '导服');
+        $insurance = $this->serviceField($text, '保险', '优化\s*服务', '保险');
+        $selfFundedItems = $this->notIncludedItems($text);
+
         return [
             'title' => $title,
             'region' => preg_match('/长春|长白山|延吉|吉林/u', $text) ? '东北' : '其他',
             'location' => $this->destinations($text),
             'summary' => $summary,
-            'min_people' => 20,
-            'max_people' => max(25, (int) ($this->match('/按(\d+)人核算/u', $text) ?: 25)),
+            'min_people' => min(20, max(1, $declaredPeople - 1)),
+            'max_people' => max(25, $declaredPeople),
             'departure_city' => $this->match('/参考航班：\s*([^\-\n]+)-/u', $text) ?: '杭州',
             'return_city' => $this->match('/参考航班：[^\n]*[－-]([^A-Z\d\n]+)[A-Z]{2}\d+/u', $text) ?: '杭州',
             'inbound_transport' => $this->flightLine($text, '杭州', '长春'),
             'outbound_transport' => $this->flightLine($text, '长春', '杭州'),
             'highlights' => $highlights,
             'experiences' => $this->oneLine($this->between($text, '》特色体验', '日期')),
-            'hotel_standard' => $this->serviceValue($text, '住宿', '用\s*餐'),
-            'meal_standard' => $this->serviceValue($text, '用\s*餐', '交通'),
-            'local_transport' => $this->serviceValue($text, '交通', '门票'),
-            'ticket_standard' => $this->serviceValue($text, '门票', '导\s*服'),
-            'guide_service' => $this->serviceValue($text, '导\s*服', '保险'),
-            'insurance' => $this->serviceValue($text, '保险', '优化\s*服务'),
+            'hotel_standard' => $hotelStandard,
+            'meal_standard' => $mealStandard,
+            'local_transport' => $localTransport,
+            'ticket_standard' => $ticketStandard,
+            'guide_service' => $guideService,
+            'insurance' => $insurance,
             'value_added' => $this->numberedItems($this->between($text, '优化\n服务', '注意\n事项')),
-            'self_funded_items' => [
+            'self_funded_items' => $selfFundedItems ?: [
                 '往返大交通费用（如机票、高铁票），除非工会最终发布方案明确包含',
                 '个人消费及方案未列明项目',
             ],
@@ -91,6 +114,19 @@ class RetreatRoutePdfParser
     private function parseDays(string $text): array
     {
         preg_match_all('/(?:^|\n)D(\d+)\s*\n(.*?)(?=(?:\nD\d+\s*\n)|(?:\n接待服务标准)|\z)/su', $text, $matches, PREG_SET_ORDER);
+
+        if ($matches === []) {
+            preg_match_all(
+                '/(?:^|\n)(\d{1,2}\.\d{1,2})[ \t]*\n(?:周[一二三四五六日天][ \t]*\n)?(.*?)(?=(?:\n\d{1,2}\.\d{1,2}[ \t]*\n)|\n注：|\n费\s*\n用|\z)/su',
+                $text,
+                $datedMatches,
+                PREG_SET_ORDER,
+            );
+            $matches = collect($datedMatches)
+                ->values()
+                ->map(fn (array $match, int $index) => [$match[0], (string) ($index + 1), $match[2]])
+                ->all();
+        }
 
         return collect($matches)->map(function (array $match): array {
             $number = (int) $match[1];
@@ -187,10 +223,55 @@ class RetreatRoutePdfParser
     private function serviceValue(string $text, string $start, string $end): string
     {
         if (! preg_match('/(?:^|\n)'.$start.'[ \t]*(?:\n)?(.*?)(?=\n'.$end.')/su', $text, $match)) {
-            return '请根据原 PDF 核对补充';
+            return '';
         }
 
         return $this->oneLine($match[1]);
+    }
+
+    private function serviceField(string $text, string $start, string $end, string $numberedLabel): string
+    {
+        return $this->serviceValue($text, $start, $end)
+            ?: $this->numberedServiceValue($text, $numberedLabel)
+            ?: '请根据原 PDF 核对补充';
+    }
+
+    private function numberedServiceValue(string $text, string $label): string
+    {
+        $label = preg_quote($label, '/');
+        if (! preg_match(
+            '/(?:^|\n)\s*\d+[.、]\s*'.$label.'[：:]\s*(.*?)(?=\n\s*\d+[.、]\s*[^：:\n]+[：:]|\n【不含项目】|\z)/su',
+            $text,
+            $match,
+        )) {
+            return '';
+        }
+
+        return $this->oneLine($match[1]);
+    }
+
+    /** @return array<int, string> */
+    private function notIncludedItems(string $text): array
+    {
+        $block = $this->between($text, '【不含项目】', '温馨提示:');
+        if ($block === '') {
+            return [];
+        }
+
+        return collect(preg_split('/[，,；;\n]+/u', $block) ?: [])
+            ->map(fn (string $item) => trim($item))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function declaredPeople(string $text): int
+    {
+        if (preg_match('/人数[：:]\s*(\d+)(?:\s*\+\s*(\d+))?/u', $text, $match)) {
+            return (int) $match[1] + (int) ($match[2] ?? 0);
+        }
+
+        return (int) ($this->match('/按(\d+)人核算/u', $text) ?: 25);
     }
 
     /** @return array<int, string> */

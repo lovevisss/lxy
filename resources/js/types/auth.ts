@@ -8,6 +8,12 @@ export type User = {
     directory_email?: string | null;
     mobile?: string | null;
     role?: 'admin' | 'department_approver' | 'union_approver' | 'teacher';
+    group_roles?: (
+        'admin' | 'group_department_reviewer' | 'group_final_reviewer'
+    )[];
+    is_admin?: boolean;
+    can_route_approve?: boolean;
+    can_group_approve?: boolean;
     department?: string | null;
     avatar?: string;
     email_verified_at: string | null;

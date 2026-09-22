@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -48,6 +49,18 @@ class User extends Authenticatable implements PasskeyUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            if ($user->role === 'admin' && Schema::hasTable('retreat_role_assignments')) {
+                $user->roleAssignments()->firstOrCreate(
+                    ['role' => RetreatRoleAssignment::ADMIN],
+                    ['active' => true],
+                );
+            }
+        });
+    }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -81,13 +94,69 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(RetreatGroupReview::class);
     }
 
+    public function roleAssignments(): HasMany
+    {
+        return $this->hasMany(RetreatRoleAssignment::class);
+    }
+
     public function isRetreatAdmin(): bool
     {
-        return $this->role === 'admin';
+        return $this->hasActiveRetreatRole(RetreatRoleAssignment::ADMIN);
     }
 
     public function canApproveRetreat(): bool
     {
-        return in_array($this->role, ['admin', 'department_approver', 'union_approver'], true);
+        return in_array($this->role, ['department_approver', 'union_approver'], true);
+    }
+
+    public function isGroupDepartmentReviewer(?string $department = null): bool
+    {
+        if (! $this->retreat_eligible) {
+            return false;
+        }
+
+        $department ??= $this->department;
+
+        if (! $department || $department !== $this->department) {
+            return false;
+        }
+
+        return $this->roleAssignments()
+            ->where('role', RetreatRoleAssignment::DEPARTMENT_REVIEWER)
+            ->where('active', true)
+            ->where('scope_department', $department)
+            ->exists();
+    }
+
+    public function isGroupFinalReviewer(): bool
+    {
+        return $this->retreat_eligible
+            && $this->hasActiveRetreatRole(RetreatRoleAssignment::FINAL_REVIEWER);
+    }
+
+    public function canApproveGroup(): bool
+    {
+        return $this->isGroupFinalReviewer() || $this->isGroupDepartmentReviewer();
+    }
+
+    public function hasActiveRetreatRole(string $role): bool
+    {
+        return $this->roleAssignments()
+            ->where('role', $role)
+            ->where('active', true)
+            ->exists();
+    }
+
+    /** @return array<int, string> */
+    public function activeRetreatRoles(): array
+    {
+        return $this->roleAssignments()
+            ->where('active', true)
+            ->get()
+            ->filter(fn (RetreatRoleAssignment $assignment) => $assignment->role !== RetreatRoleAssignment::DEPARTMENT_REVIEWER
+                || $assignment->scope_department === $this->department)
+            ->pluck('role')
+            ->values()
+            ->all();
     }
 }
